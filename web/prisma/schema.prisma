@@ -1,0 +1,21 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Event {
+  id            String   @id @default(uuid())
+  playerName    String
+  team          String?
+  occurredAt    DateTime @default(now())
+  accelerationG Decimal
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([accelerationG(sort: Desc)])
+  @@index([playerName])
+  @@index([team])
+}
