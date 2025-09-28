@@ -13,7 +13,7 @@ export default function AboutPage() {
         <div className="flex items-center justify-center mb-4">
           <img src="/logo.png" alt="Happy Head" className="h-40 sm:h-56 md:h-72 object-contain" />
         </div>
-        <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-blue-900">About Happy Head</h1>
+        <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-blue-900 font-mono">About Happy Head</h1>
       <p className="text-xl text-gray-800">
         This project helps detect and track potentially concussive impacts by collecting event data
         (player, team, timestamp, and measured acceleration in g). The goal is to surface patterns
