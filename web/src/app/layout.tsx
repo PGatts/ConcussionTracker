@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "@/app/providers";
 
 export const metadata: Metadata = {
-  title: "Concussion Events",
-  description: "Public read-only concussion events table",
+  title: "Happy Head",
+  description: "Modular IoT platform focused on traumatic brain injury detection and prevention.",
 };
 
 export default function RootLayout({
