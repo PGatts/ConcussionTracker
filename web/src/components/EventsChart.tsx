@@ -98,6 +98,22 @@ export function EventsChart(props: {
     "#581c87"  // purple-900
   ];
 
+  // For the pie chart specifically: start with purple and yellow, then cycle other distinct colors
+  const PIE_COLORS = [
+    "#8b5cf6", // purple (violet-500)
+    "#facc15", // yellow (yellow-400)
+    "#10b981", // emerald-500
+    "#38bdf8", // sky-400
+    "#f43f5e", // rose-500
+    "#fb923c", // orange-400
+    "#6366f1", // indigo-500
+    "#06b6d4", // cyan-500
+    "#14b8a6", // teal-500
+    "#ec4899", // pink-500
+    "#84cc16", // lime-500
+    "#3b82f6"  // blue-500
+  ];
+
   if (chartType === "histogram" && xVar) {
     // For accelerationG, use fixed bins: 0-30, 31-60, 61+
     if (xVar === "accelerationGNum" || xVar === "angularVelocityNum") {
@@ -245,9 +261,7 @@ export function EventsChart(props: {
         <PieChart>
           <Pie data={data} dataKey="value" nameKey="name" outerRadius={110} label>
             {data.map((_, idx) => {
-              // Make the secondary color a yellow accent for contrast
-              const fallback = COLORS[idx % COLORS.length];
-              const color = idx % 2 === 1 ? "#facc15" /* yellow-400 */ : fallback;
+              const color = PIE_COLORS[idx % PIE_COLORS.length];
               return <Cell key={idx} fill={color} />;
             })}
           </Pie>
