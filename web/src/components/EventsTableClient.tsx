@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import * as htmlToImage from "html-to-image";
 import {
   ColumnDef,
@@ -21,21 +22,24 @@ type Event = {
   team?: string | null;
   occurredAt: string;
   accelerationG: number;
+  angularVelocity: number;
 };
 
 type ChartType = "histogram" | "bar" | "pie";
-type XVar = "accelerationG" | "occurredAt";
-type GroupBy = "team" | "playerName";
-type Agg = "count" | "sum" | "avg";
+type XVar = "accelerationG" | "angularVelocity" | "occurredAt";
+type GroupBy = "team" | "playerName" | "timeYear";
+type Agg = "count" | "sum" | "avg" | "sumOmega" | "avgAngular";
 
 type UrlState = {
   playerName: string;
   team: string;
   accelMin: string;
   accelMax: string;
+  angularMin?: string;
+  angularMax?: string;
   timeFrom: string;
   timeTo: string;
-  sortBy: "occurredAt" | "accelerationG";
+  sortBy: "occurredAt" | "accelerationG" | "angularVelocity";
   order: "asc" | "desc";
   chartType: ChartType;
   xVar: XVar;
@@ -53,9 +57,11 @@ function useUrlState() {
       team: sp.get("team") || "",
       accelMin: sp.get("accelMin") || "",
       accelMax: sp.get("accelMax") || "",
+      angularMin: sp.get("angularMin") || "",
+      angularMax: sp.get("angularMax") || "",
       timeFrom: sp.get("timeFrom") || "",
       timeTo: sp.get("timeTo") || "",
-      sortBy: (sp.get("sortBy") as "occurredAt" | "accelerationG") || "occurredAt",
+      sortBy: (sp.get("sortBy") as UrlState["sortBy"]) || "occurredAt",
       order: (sp.get("order") as "asc" | "desc") || "desc",
       // chart config
       chartType: (sp.get("chartType") as ChartType) || "histogram",
@@ -174,6 +180,12 @@ export function EventsTableClient() {
         return Number.isFinite(v) ? v.toFixed(1) : "";
       }
     },
+    { accessorKey: "angularVelocity", header: "Angular Velocity (°/s)",
+      cell: ({ row }) => {
+        const v = row.original.angularVelocity;
+        return v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(v).toFixed(1) : "";
+      }
+    },
   ], []);
 
   const filtered = React.useMemo(() => {
@@ -193,6 +205,14 @@ export function EventsTableClient() {
       const v = Number(urlState.accelMax);
       if (!Number.isNaN(v)) rows = rows.filter(r => r.accelerationG <= v);
     }
+    if (urlState.angularMin) {
+      const v = Number(urlState.angularMin);
+      if (!Number.isNaN(v)) rows = rows.filter(r => r.angularVelocity >= v);
+    }
+    if (urlState.angularMax) {
+      const v = Number(urlState.angularMax);
+      if (!Number.isNaN(v)) rows = rows.filter(r => r.angularVelocity <= v);
+    }
     if (urlState.timeFrom) {
       const fromStr = urlState.timeFrom.includes("T") ? urlState.timeFrom : `${urlState.timeFrom}T00:00:00`;
       const v = Date.parse(fromStr);
@@ -209,13 +229,14 @@ export function EventsTableClient() {
     return rows;
   }, [data, urlState]);
 
-  type ChartRow = Event & { accelerationGNum: number; occurredAtMs: number };
+  type ChartRow = Event & { accelerationGNum: number; occurredAtMs: number; angularVelocityNum: number };
   const chartRows = React.useMemo<ChartRow[]>(() => {
     return (filtered ?? [])
       .map((r) => ({
         ...r,
         accelerationGNum: Number(r.accelerationG),
         occurredAtMs: Date.parse(r.occurredAt),
+        angularVelocityNum: Number(r.angularVelocity),
       }))
       .filter((r) => Number.isFinite(r.accelerationGNum) && Number.isFinite(r.occurredAtMs));
   }, [filtered]);
@@ -275,6 +296,7 @@ export function EventsTableClient() {
       "Team": e.team ?? "",
       "Time": new Date(e.occurredAt).toLocaleString(),
       "Acceleration (g)": Number.isFinite(Number(e.accelerationG)) ? Number(e.accelerationG).toFixed(1) : "",
+      "Angular Velocity (°/s)": Number.isFinite(Number(e.angularVelocity)) ? Number(e.angularVelocity).toFixed(1) : "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -373,7 +395,7 @@ export function EventsTableClient() {
   return (
     <div className="p-4">
       <div className="flex items-center justify-center mb-4">
-        <img src="/logo.png" alt="Happy Head" className="h-40 sm:h-56 md:h-72 object-contain" />
+        <Image src="/logo.png" alt="Happy Head" width={1200} height={300} className="h-40 sm:h-56 md:h-72 object-contain w-auto" priority />
       </div>
       
       
@@ -529,6 +551,10 @@ export function EventsTableClient() {
                         ? 'w-40 sm:w-64 lg:w-80 whitespace-nowrap'
                         : h.column.id === 'occurredAt'
                         ? 'w-40 sm:w-56 lg:w-64 whitespace-nowrap'
+                        : h.column.id === 'accelerationG'
+                        ? 'w-44 sm:w-56 lg:w-64 whitespace-nowrap'
+                        : h.column.id === 'angularVelocity'
+                        ? 'w-56 sm:w-72 lg:w-80 whitespace-nowrap'
                         : h.column.id === 'team' || h.column.id === 'playerName'
                         ? 'w-56 sm:w-80 lg:w-96'
                         : ''
@@ -552,6 +578,10 @@ export function EventsTableClient() {
                         ? 'w-40 sm:w-64 lg:w-80 whitespace-nowrap'
                         : c.column.id === 'occurredAt'
                         ? 'w-40 sm:w-56 lg:w-64 whitespace-nowrap'
+                        : c.column.id === 'accelerationG'
+                        ? 'w-44 sm:w-56 lg:w-64 whitespace-nowrap'
+                        : c.column.id === 'angularVelocity'
+                        ? 'w-56 sm:w-72 lg:w-80 whitespace-nowrap'
                         : c.column.id === 'team' || c.column.id === 'playerName'
                         ? 'w-56 sm:w-80 lg:w-96'
                         : ''
@@ -600,6 +630,7 @@ export function EventsTableClient() {
                     onChange={e => setUrlState(s => ({ ...s, xVar: e.target.value as XVar }))}
                   >
                     <option value="accelerationG">Acceleration (g)</option>
+                    <option value="angularVelocity">Angular Velocity (°/s)</option>
                     <option value="occurredAt">Time</option>
                   </select>
                 </div>
@@ -618,6 +649,7 @@ export function EventsTableClient() {
                     >
                       <option value="team">Team</option>
                       <option value="playerName">Player</option>
+                      {urlState.chartType === "bar" && (<option value="timeYear">Time (year)</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -629,10 +661,14 @@ export function EventsTableClient() {
                     >
                       <option value="count">Count</option>
                       {urlState.chartType === "pie" ? (
-                        <option value="sum">Sum of g</option>
+                        <>
+                          <option value="sum">Sum of g</option>
+                          <option value="sumOmega">Sum ω (°/s)</option>
+                        </>
                       ) : (
                         <option value="avg">Avg g</option>
                       )}
+                      {urlState.chartType === "bar" && (<option value="avgAngular">Avg ω (°/s)</option>)}
                     </select>
                   </div>
                 </>
@@ -687,8 +723,10 @@ export function EventsTableClient() {
         </div>
         {showChart && (
           (() => {
-            const xVarKey: "occurredAtMs" | "accelerationGNum" = urlState.xVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
-            const yVarKey: "occurredAtMs" | "accelerationGNum" = urlState.yVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
+            const xVarKey: "occurredAtMs" | "accelerationGNum" | "angularVelocityNum" =
+              urlState.xVar === "occurredAt" ? "occurredAtMs" : (urlState.xVar === "accelerationG" ? "accelerationGNum" : "angularVelocityNum");
+            const yVarKey: "occurredAtMs" | "accelerationGNum" | "angularVelocityNum" =
+              urlState.yVar === "occurredAt" ? "occurredAtMs" : (urlState.yVar === "accelerationG" ? "accelerationGNum" : "angularVelocityNum");
             return (
               <div ref={chartRef} id="events-chart" className="w-full bg-gradient-to-r from-blue-200 via-blue-300 to-blue-200 rounded">
                 <EventsChart
@@ -696,8 +734,8 @@ export function EventsTableClient() {
                   chartType={urlState.chartType}
                   xVar={xVarKey}
                   yVar={yVarKey}
-                  groupBy={urlState.groupBy}
-                  agg={urlState.agg}
+                  groupBy={urlState.groupBy as unknown as "team" | "playerName" | "timeYear"}
+                  agg={urlState.agg as unknown as "count" | "sum" | "avg" | "sumOmega"}
                 />
               </div>
             );
@@ -749,15 +787,15 @@ function PlayerMeta({ name, events }: PlayerMetaProps) {
     const latest = playerEvents.reduce((a, b) => (Date.parse(a.occurredAt) > Date.parse(b.occurredAt) ? a : b));
     return new Date(latest.occurredAt).toLocaleString();
   }, [playerEvents]);
-  const { avgG, maxG } = React.useMemo(() => {
-    if (playerEvents.length === 0) return { avgG: null as number | null, maxG: null as number | null };
-    const vals = playerEvents
-      .map(e => Number(e.accelerationG))
-      .filter(n => Number.isFinite(n));
-    if (vals.length === 0) return { avgG: null, maxG: null };
-    const sum = vals.reduce((a, b) => a + b, 0);
-    const max = Math.max(...vals);
-    return { avgG: sum / vals.length, maxG: max };
+  const { avgG, maxG, avgAV, maxAV } = React.useMemo(() => {
+    if (playerEvents.length === 0) return { avgG: null as number | null, maxG: null as number | null, avgAV: null as number | null, maxAV: null as number | null };
+    const gVals = playerEvents.map(e => Number(e.accelerationG)).filter(n => Number.isFinite(n));
+    const avVals = playerEvents.map(e => Number(e.angularVelocity)).filter(n => Number.isFinite(n));
+    const avgGVal = gVals.length ? gVals.reduce((a, b) => a + b, 0) / gVals.length : null;
+    const maxGVal = gVals.length ? Math.max(...gVals) : null;
+    const avgAVVal = avVals.length ? avVals.reduce((a, b) => a + b, 0) / avVals.length : null;
+    const maxAVVal = avVals.length ? Math.max(...avVals) : null;
+    return { avgG: avgGVal, maxG: maxGVal, avgAV: avgAVVal, maxAV: maxAVVal };
   }, [playerEvents]);
   return (
     <div className="text-sm text-gray-700 space-y-2">
@@ -768,6 +806,8 @@ function PlayerMeta({ name, events }: PlayerMetaProps) {
         <span className="mr-4"><span className="font-semibold">Collisions:</span> {playerEvents.length}</span>
         <span className="mr-4"><span className="font-semibold">Avg g:</span> {avgG !== null ? avgG.toFixed(1) : "—"}</span>
         <span className="mr-4"><span className="font-semibold">Max g:</span> {maxG !== null ? maxG.toFixed(1) : "—"}</span>
+        <span className="mr-4"><span className="font-semibold">Avg ω (°/s):</span> {avgAV !== null ? avgAV.toFixed(1) : "—"}</span>
+        <span className="mr-4"><span className="font-semibold">Max ω (°/s):</span> {maxAV !== null ? maxAV.toFixed(1) : "—"}</span>
         <span><span className="font-semibold">Most recent:</span> {mostRecent}</span>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 export default function AboutPage() {
   return (
     <>
@@ -11,7 +13,7 @@ export default function AboutPage() {
       </div>
       <div className="p-6 max-w-3xl mx-auto space-y-8">
         <div className="flex items-center justify-center mb-4">
-          <img src="/logo.png" alt="Happy Head" className="h-40 sm:h-56 md:h-72 object-contain" />
+          <Image src="/logo.png" alt="Happy Head" width={1200} height={300} className="h-40 sm:h-56 md:h-72 object-contain w-auto" priority />
         </div>
         <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-blue-900 font-mono">About Happy Head</h1>
       <p className="text-xl text-gray-800">

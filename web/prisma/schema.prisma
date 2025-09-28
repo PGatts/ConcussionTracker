@@ -13,9 +13,11 @@ model Event {
   team          String?
   occurredAt    DateTime @default(now())
   accelerationG Decimal
+  angularVelocity Decimal
 
   @@index([occurredAt(sort: Desc)])
   @@index([accelerationG(sort: Desc)])
+  @@index([angularVelocity(sort: Desc)])
   @@index([playerName])
   @@index([team])
 }
