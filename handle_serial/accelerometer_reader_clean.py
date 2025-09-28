@@ -27,8 +27,9 @@ try:
 except ImportError:
     print("Warning: config.py not found, using default values")
     # Default values if config.py is missing
-    THRESHOLD_G = 2
-    THRESHOLD_GYRO = 250  # Threshold for gyroscope data (degrees/second or similar unit)
+    THRESHOLD_G = 2                    # Alert threshold for dangerous hits
+    PRINT_WORTHY_THRESHOLD_G = 1.2     # Minimum G-force to qualify as a countable hit
+    THRESHOLD_GYRO = 250               # Threshold for gyroscope data (degrees/second or similar unit)
     ALERT_COOLDOWN = 5
     SEND_ALL_DATA = False
     DATABASE_URL = "http://concussion-tracker.vercel.app/api/admin/events"
@@ -225,11 +226,11 @@ def main():
     
     print("=== Accelerometer & Angular Velocity Monitor ===")
     print(f"Player: {PLAYER_NAME} ({TEAM_NAME})")
-    print(f"G-Force Threshold: {THRESHOLD_G}G (sends to database)")
-    print(f"Angular Threshold: {THRESHOLD_GYRO} deg/s (terminal display only)")
+    print(f"Print Worthy Threshold: {PRINT_WORTHY_THRESHOLD_G}G (minimum to count as hit)")
+    print(f"Alert Threshold: {THRESHOLD_G}G (dangerous hits - sends to database)")
+    print(f"Angular Threshold: {THRESHOLD_GYRO} deg/s (sends to database)")
     print(f"Database: {DATABASE_URL}")
     print(f"Send all data: {SEND_ALL_DATA}")
-    print("Note: Angular velocity data is displayed but not sent to database")
     print("=" * 40)
     
     # Test database connection first
@@ -254,8 +255,9 @@ def main():
         return
     
     # Variables to track data
-    hit_count = 0
-    event_count = 0
+    hit_count = 0           # Qualified hits (>= 1.5G)
+    total_readings = 0      # All G-force readings
+    event_count = 0         # Database events sent
     last_alert_time = 0
     
     # Variables to track sensor readings - pair them together
@@ -276,13 +278,17 @@ def main():
                 data_type, raw_value = parse_sensor_data(line)
             
                 if data_type == 'g_force' and raw_value is not None:
-                    hit_count += 1
+                    total_readings += 1
                     latest_g_force = raw_value
                     waiting_for_gyroscope = True  # Set flag to wait for paired gyroscope reading
                     magnitude_g = raw_value / MAGNITUDE_SCALE  # Convert to G-force
                     
-                    # Display reading but don't process database send yet - wait for gyroscope
-                    print(f"Hit #{hit_count}: G-Force {magnitude_g:.2f}G")
+                    # Only count as a hit if it meets the print-worthy threshold
+                    if magnitude_g >= PRINT_WORTHY_THRESHOLD_G:
+                        hit_count += 1
+                        print(f"Hit #{hit_count}: G-Force {magnitude_g:.2f}G ⭐ (Print Worthy)")
+                    else:
+                        print(f"Reading #{total_readings}: G-Force {magnitude_g:.2f}G (Below {PRINT_WORTHY_THRESHOLD_G}G threshold)")
                 
                 elif data_type == 'gyroscope' and raw_value is not None and waiting_for_gyroscope:
                     # Now we have both readings - process them together as a complete pair
@@ -390,11 +396,14 @@ def main():
                 
     except KeyboardInterrupt:
         print(f"\n=== Session Summary ===")
-        print(f"Total hits recorded: {hit_count}")
-        print(f"Events sent to database: {event_count}")
+        print(f"Total sensor readings: {total_readings}")
+        print(f"Qualified hits (≥{PRINT_WORTHY_THRESHOLD_G}G): {hit_count}")
+        print(f"Hit percentage: {(hit_count/total_readings*100):.1f}%" if total_readings > 0 else "Hit percentage: 0.0%")
+        print(f"Database events sent: {event_count}")
         print(f"Player: {PLAYER_NAME} ({TEAM_NAME})")
-        print(f"G-Force Threshold: {THRESHOLD_G}G")
-        print(f"Gyroscope Threshold: {THRESHOLD_GYRO} deg/s")
+        print(f"Print Worthy Threshold: {PRINT_WORTHY_THRESHOLD_G}G")
+        print(f"Alert Threshold: {THRESHOLD_G}G")
+        print(f"Angular Threshold: {THRESHOLD_GYRO} deg/s")
     finally:
         ser.close()
         print("Serial connection closed.")
