@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         team: team ?? null,
         occurredAt: new Date(occurredAt),
         accelerationG,
-        angularVelocity: typeof angularVelocity === "number" ? angularVelocity : 0,
+        angularVelocity
       },
     });
     return NextResponse.json({ event }, { status: 201 });
