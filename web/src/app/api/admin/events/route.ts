@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { playerName, team, occurredAt, accelerationG, angularVelocity } = body ?? {};
-    if (!playerName || !occurredAt || typeof accelerationG !== "number") {
-      return NextResponse.json({ error: "playerName, occurredAt and accelerationG are required" }, { status: 400 });
+    if (!playerName || !occurredAt || typeof accelerationG !== "number" || typeof angularVelocity !== "number") {
+      return NextResponse.json({ error: "playerName, occurredAt, accelerationG, and angularVelocity are required" }, { status: 400 });
     }
 
     const event = await prisma.event.create({
