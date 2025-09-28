@@ -13,7 +13,7 @@ const FRAMES_CONFIRM = 3;    // more frames to confirm real collision
 const CLIP_PRE_SECONDS = 5.0;
 const FPS = 30;
 const TASKS_VERSION = "0.10.14"; // pin to avoid CDN version mismatches
-const HITBOX_SCALE = 1.25; // make hitboxes 25% larger
+const HITBOX_SCALE = 1.5; // make hitboxes larger
 const RATIO_THRESHOLD = 0.8; // faces must be very similar in size (front/back would be very different)
 
 function computeIoU(a: [number, number, number, number], b: [number, number, number, number]) {
