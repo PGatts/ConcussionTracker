@@ -37,9 +37,8 @@ export function EventsChart(props: {
   yVar?: NumericKey;
   groupBy?: CategoricalKey;
   agg?: Agg;
-  binCount?: number;
 }) {
-  const { rows, chartType, xVar, yVar, groupBy, agg = "count", binCount = 20 } = props;
+  const { rows, chartType, xVar, yVar, groupBy, agg = "count" } = props;
 
   if (!rows?.length) {
     return <div className="text-sm text-gray-600">No data to chart.</div>;
@@ -74,7 +73,18 @@ export function EventsChart(props: {
     return data;
   }
 
-  const COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#84cc16","#f472b6","#f97316","#22c55e"];
+  const COLORS = [
+    "#8b5cf6", // violet-500
+    "#a78bfa", // violet-400
+    "#7c3aed", // violet-600
+    "#c4b5fd", // violet-300
+    "#6d28d9", // violet-700
+    "#d8b4fe", // purple-300
+    "#9333ea", // purple-600
+    "#a855f7", // purple-500
+    "#e9d5ff", // purple-200
+    "#581c87"  // purple-900
+  ];
 
   if (chartType === "histogram" && xVar) {
     // For accelerationG, use fixed bins: 0-30, 31-60, 61+
@@ -84,6 +94,11 @@ export function EventsChart(props: {
         { bucket: "31–60", count: 0 },
         { bucket: "61+", count: 0 },
       ];
+      const severityByBucket: Record<string, string> = {
+        "0–30": "Mild",
+        "31–60": "Moderate",
+        "61+": "Dangerous",
+      };
       for (const r of rows) {
         const v = r.accelerationGNum;
         if (!Number.isFinite(v)) continue;
@@ -91,14 +106,25 @@ export function EventsChart(props: {
         else if (v <= 60) buckets[1].count += 1;
         else buckets[2].count += 1;
       }
+      type TickProps = { x?: number; y?: number; payload?: { value?: string } };
+      function SeverityTick({ x = 0, y = 0, payload = {} }: TickProps) {
+        const label = payload.value ?? "";
+        const severity = severityByBucket[label] ?? "";
+        return (
+          <g transform={`translate(${x},${y})`}>
+            <text dy={16} textAnchor="middle" fill="#111827">{label}</text>
+            <text dy={32} textAnchor="middle" fill="#1f2937" fontSize={12}>{severity}</text>
+          </g>
+        );
+      }
       return (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={buckets}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="bucket" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#c4b5fd" />
+            <XAxis dataKey="bucket" tick={<SeverityTick />} height={48} />
             <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Bar dataKey="count" fill="#3b82f6" />
+            <Tooltip cursor={{ fill: "#ddd6fe", opacity: 0.6 }} />
+            <Bar dataKey="count" fill="#8b5cf6" />
           </BarChart>
         </ResponsiveContainer>
       );
@@ -137,18 +163,19 @@ export function EventsChart(props: {
       return (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#c4b5fd" />
             <XAxis dataKey="bucket" />
             <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Bar dataKey="count" fill="#3b82f6" />
+          <Tooltip cursor={{ fill: "#ddd6fe", opacity: 0.6 }} />
+            <Bar dataKey="count" fill="#8b5cf6" />
           </BarChart>
         </ResponsiveContainer>
       );
     }
 
     // Default numeric binning for time-based histograms
-    const data = buildHistogram(xVar, binCount);
+    const defaultBins = 20;
+    const data = buildHistogram(xVar, defaultBins);
     const formatted = data.map(d => ({
       bucket: `${Number.isFinite(d.x0) ? (d.x0 as number).toFixed(1) : d.x0}–${Number.isFinite(d.x1) ? (d.x1 as number).toFixed(1) : d.x1}`,
       count: d.count,
@@ -156,11 +183,11 @@ export function EventsChart(props: {
     return (
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={formatted}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#c4b5fd" />
           <XAxis dataKey="bucket" />
           <YAxis allowDecimals={false} />
-          <Tooltip />
-          <Bar dataKey="count" fill="#3b82f6" />
+        <Tooltip cursor={{ fill: "#ddd6fe", opacity: 0.6 }} />
+          <Bar dataKey="count" fill="#8b5cf6" />
         </BarChart>
       </ResponsiveContainer>
     );
@@ -186,12 +213,12 @@ export function EventsChart(props: {
     return (
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#c4b5fd" />
           <XAxis dataKey="name" />
           <YAxis allowDecimals={false} />
           <Tooltip />
           <Legend />
-          <Bar dataKey="value" name={agg === "avg" ? "Avg acceleration (g)" : "Count"} fill="#10b981" />
+          <Bar dataKey="value" name={agg === "avg" ? "Avg acceleration (g)" : "Count"} fill="#8b5cf6" />
         </BarChart>
       </ResponsiveContainer>
     );
@@ -203,10 +230,15 @@ export function EventsChart(props: {
       <ResponsiveContainer width="100%" height={320}>
         <PieChart>
           <Pie data={data} dataKey="value" nameKey="name" outerRadius={110} label>
-            {data.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
+            {data.map((_, idx) => {
+              // Make the secondary color a yellow accent for contrast
+              const fallback = COLORS[idx % COLORS.length];
+              const color = idx % 2 === 1 ? "#facc15" /* yellow-400 */ : fallback;
+              return <Cell key={idx} fill={color} />;
+            })}
           </Pie>
           <Tooltip />
-          <Legend />
+          <Legend formatter={(value: string) => (<span style={{ color: '#000000' }}>{value}</span>)} />
         </PieChart>
       </ResponsiveContainer>
     );
