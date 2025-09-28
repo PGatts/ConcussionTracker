@@ -78,6 +78,7 @@ export default function CameraPage() {
   const [collisionCount, setCollisionCount] = useState(0);
   const overlapStreakRef = useRef(0);
   const currentlyOverlappingRef = useRef(false);
+  const savingVideoRef = useRef(false);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -144,50 +145,76 @@ export default function CameraPage() {
       // Defer recorder start until first valid frame to avoid zero-size attachments
       const startRecorderIfNeeded = () => {
         if (recorderStartedRef.current) return;
+        
+        // Ensure canvas has valid dimensions before capturing stream
+        if (canvas.width <= 0 || canvas.height <= 0) return;
+        
         recorderStreamRef.current = canvas.captureStream(FPS);
         
-        // Use MP4 if supported, otherwise fall back to WebM
-        let mimeType = "video/mp4";
+        // Use the most compatible codec
+        let mimeType = "video/webm;codecs=vp8";
         if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = "video/webm;codecs=vp8"; // VP8 is more compatible than VP9
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = "video/webm";
-          }
+          mimeType = "video/webm";
         }
         
         recorderRef.current = new MediaRecorder(recorderStreamRef.current, { 
           mimeType,
-          videoBitsPerSecond: 1000000 // 1 Mbps - lower bitrate for stability
+          videoBitsPerSecond: 2000000, // 2 Mbps for better quality
+          bitsPerSecond: 2000000
         });
+        
+        // Use a different approach for buffering - store complete video segments
+        let recordingChunks: Blob[] = [];
+        let isRecording = false;
         
         recorderRef.current.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
-            chunksRef.current.push(e.data);
-            timesRef.current.push(performance.now());
-            
-            // Keep only last 5 seconds of chunks
-            const cutoff = performance.now() - CLIP_PRE_SECONDS * 1000;
-            while (timesRef.current.length > 0 && timesRef.current[0] < cutoff) {
-              timesRef.current.shift();
-              chunksRef.current.shift();
-            }
+            recordingChunks.push(e.data);
+          }
+        };
+        
+        recorderRef.current.onstop = () => {
+          if (recordingChunks.length > 0) {
+            // Store the complete recording
+            const completeBlob = new Blob(recordingChunks, { type: mimeType });
+            chunksRef.current = [completeBlob]; // Store as single blob
+            timesRef.current = [performance.now()];
+            recordingChunks = [];
           }
         };
         
         recorderRef.current.onstart = () => {
           console.log("MediaRecorder started successfully");
-        };
-        
-        recorderRef.current.onstop = () => {
-          console.log("MediaRecorder stopped");
+          isRecording = true;
+          recordingChunks = [];
         };
         
         recorderRef.current.onerror = (e) => {
           console.error("MediaRecorder error:", e);
         };
         
-        recorderRef.current.start(1000); // 1 second chunks for better file integrity
+        // Start continuous recording
+        recorderRef.current.start();
         recorderStartedRef.current = true;
+        
+        // Restart recording every 6 seconds to maintain rolling buffer
+        const restartRecording = () => {
+          if (!recorderRef.current || !isRecording) return;
+          
+          try {
+            recorderRef.current.stop();
+            setTimeout(() => {
+              if (recorderRef.current && recorderRef.current.state === 'inactive') {
+                recorderRef.current.start();
+                setTimeout(restartRecording, 6000);
+              }
+            }, 100);
+          } catch (e) {
+            console.error("Error restarting recording:", e);
+          }
+        };
+        
+        setTimeout(restartRecording, 6000);
         console.log("MediaRecorder started with mimeType:", mimeType);
       };
 
@@ -309,42 +336,74 @@ export default function CameraPage() {
 
           overlapStreakRef.current = isCollisionNow ? overlapStreakRef.current + 1 : 0;
           const confirmed = overlapStreakRef.current >= FRAMES_CONFIRM;
-          if (confirmed && !currentlyOverlappingRef.current) {
+          if (confirmed && !currentlyOverlappingRef.current && !savingVideoRef.current) {
             setCollisionCount((c) => c + 1);
+            savingVideoRef.current = true; // Prevent multiple saves
             
-            // Save collision video
-            if (chunksRef.current.length > 0) {
-              console.log(`Saving collision video with ${chunksRef.current.length} chunks`);
+            // Save collision video - force stop current recording to capture latest footage
+            if (recorderRef.current && recorderRef.current.state === 'recording') {
+              console.log("Stopping recording to capture collision video...");
               
-              // Determine MIME type and extension from recorder
-              const mimeType = recorderRef.current?.mimeType || "video/webm";
-              const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+              const originalOnStop = recorderRef.current.onstop;
+              recorderRef.current.onstop = (e) => {
+                // Call original onstop to process the recording
+                if (originalOnStop && recorderRef.current) originalOnStop.call(recorderRef.current, e);
+                
+                // Now save the video
+                setTimeout(() => {
+                  if (chunksRef.current.length > 0) {
+                    console.log(`Saving collision video with ${chunksRef.current.length} chunks`);
+                    
+                    // Use the latest complete recording
+                    const blob = chunksRef.current[chunksRef.current.length - 1];
+                    const mimeType = recorderRef.current?.mimeType || "video/webm";
+                    const extension = "webm";
+                    
+                    console.log(`Blob size: ${blob.size} bytes, MIME: ${mimeType}`);
+                    
+                    if (blob.size > 0) {
+                      const tsName = new Date().toISOString().replace(/[:.]/g, "-");
+                      const url = URL.createObjectURL(blob);
+                      
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `collision_${tsName}.${extension}`;
+                      a.style.display = "none";
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      
+                      // Clean up the URL after a delay
+                      setTimeout(() => URL.revokeObjectURL(url), 1000);
+                      
+                      console.log(`Downloaded: collision_${tsName}.${extension}`);
+                    } else {
+                      console.warn("Blob is empty, skipping download");
+                    }
+                  } else {
+                    console.warn("No recording available for collision video");
+                  }
+                  
+                  // Restart recording
+                  if (recorderRef.current && recorderRef.current.state === 'inactive') {
+                    try {
+                      recorderRef.current.start();
+                    } catch (e) {
+                      console.error("Error restarting recording after collision:", e);
+                    }
+                  }
+                  
+                  // Reset saving flag after a delay to allow for new collisions
+                  setTimeout(() => {
+                    savingVideoRef.current = false;
+                  }, 2000);
+                }, 100);
+              };
               
-              // Create blob from all available chunks
-              const blob = new Blob([...chunksRef.current], { type: mimeType });
-              console.log(`Blob size: ${blob.size} bytes, MIME: ${mimeType}`);
-              
-              if (blob.size > 0) {
-                const tsName = new Date().toISOString().replace(/[:.]/g, "-");
-                const url = URL.createObjectURL(blob);
-                
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `collision_${tsName}.${extension}`;
-                a.style.display = "none";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                
-                // Clean up the URL after a delay
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                
-                console.log(`Downloaded: collision_${tsName}.${extension}`);
-              } else {
-                console.warn("Blob is empty, skipping download");
-              }
+              recorderRef.current.stop();
             } else {
-              console.warn("No chunks available for collision video");
+              console.warn("MediaRecorder not in recording state, cannot capture collision video");
+              savingVideoRef.current = false; // Reset flag if we can't save
             }
           }
           currentlyOverlappingRef.current = confirmed;
