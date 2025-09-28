@@ -608,13 +608,13 @@ export function EventsTableClient() {
           <div className="flex items-center gap-4">
             <div
               id="chart-options"
-              className={`${showChartOptions ? 'grid' : 'grid invisible'} grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 items-start`}
+              className={`${showChartOptions ? 'flex' : 'hidden'} flex-wrap items-end gap-3`}
               aria-hidden={!showChartOptions}
             >
               <div className="flex flex-col gap-1">
                 <span className="text-sm text-yellow-900">Chart type</span>
                 <select
-                  className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-full text-yellow-900"
+                  className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-24 text-yellow-900"
           value={urlState.chartType}
                   onChange={e => setUrlState(s => ({ ...s, chartType: e.target.value as ChartType }))}
                 >
@@ -628,7 +628,7 @@ export function EventsTableClient() {
                 <div className="flex flex-col gap-1">
                   <span className="text-sm text-yellow-900">X axis</span>
                   <select
-                    className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-full text-yellow-900"
+                    className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-32 text-yellow-900"
                     value={urlState.xVar}
                     onChange={e => setUrlState(s => ({ ...s, xVar: e.target.value as XVar }))}
                   >
@@ -646,7 +646,7 @@ export function EventsTableClient() {
                   <div className="flex flex-col gap-1">
                     <span className="text-sm text-yellow-900">Group by</span>
                     <select
-                      className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-full text-yellow-900"
+                      className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-24 text-yellow-900"
                       value={urlState.groupBy}
                       onChange={e => setUrlState(s => ({ ...s, groupBy: e.target.value as GroupBy }))}
                     >
@@ -658,7 +658,7 @@ export function EventsTableClient() {
                   <div className="flex flex-col gap-1">
                     <span className="text-sm text-yellow-900">Aggregation</span>
                     <select
-                      className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-full text-yellow-900"
+                      className="border border-yellow-300 bg-yellow-50 rounded px-1 py-1 text-sm h-8 w-24 text-yellow-900"
                       value={urlState.agg}
                       onChange={e => setUrlState(s => ({ ...s, agg: e.target.value as Agg }))}
                     >
