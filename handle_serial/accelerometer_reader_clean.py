@@ -27,16 +27,18 @@ try:
 except ImportError:
     print("Warning: config.py not found, using default values")
     # Default values if config.py is missing
-    THRESHOLD = 2
+    THRESHOLD_G = 2
+    THRESHOLD_GYRO = 150  # Threshold for gyroscope data (degrees/second or similar unit)
     ALERT_COOLDOWN = 5
     SEND_ALL_DATA = False
     DATABASE_URL = "http://concussion-tracker.vercel.app/api/admin/events"
     API_KEY = "86efb20047e0b0f2b4dc40cc9c2b33c805239c72830c09b66de15b164eac0d58"
-    PLAYER_NAME = "Casey Morgan"
+    PLAYER_NAME = "Gonzalo Gonzalez"
     TEAM_NAME = "Falcons"
     SERIAL_PORT = 'COM4'
     BAUDRATE = 38400
     MAGNITUDE_SCALE = 100
+    GYROSCOPE_SCALE = 100  # Scale factor for gyroscope data (adjust as needed)
 
 def speak_alert(player_name, acceleration_g):
     """Text-to-speech alert when a hit is recorded"""
@@ -62,6 +64,34 @@ def speak_alert(player_name, acceleration_g):
         engine.runAndWait()
         
         print("  ✅ Alert spoken successfully")
+        
+    except Exception as e:
+        print(f"  ❌ Text-to-speech error: {e}")
+
+def speak_angular_alert(player_name, angular_velocity):
+    """Text-to-speech alert when angular velocity threshold is exceeded"""
+    if not TTS_AVAILABLE:
+        print("  🔇 Text-to-speech not available")
+        return
+    
+    try:
+        # Create the angular velocity alert message
+        message = f"Warning! Player 67, {player_name} has excessive head rotation of {abs(angular_velocity):.1f} degrees per second. Monitor for potential concussion signs."
+        
+        print(f"  🔊 Speaking angular alert: {message}")
+        
+        # Initialize text-to-speech engine
+        engine = pyttsx3.init()
+        
+        # Optional: Adjust speech rate and volume
+        engine.setProperty('rate', 150)    # Speed of speech
+        engine.setProperty('volume', 0.9)  # Volume (0.0 to 1.0)
+        
+        # Speak the message
+        engine.say(message)
+        engine.runAndWait()
+        
+        print("  ✅ Angular alert spoken successfully")
         
     except Exception as e:
         print(f"  ❌ Text-to-speech error: {e}")
@@ -96,25 +126,43 @@ def get_serial_connection(port=None, baudrate=38400):
         print(f"Failed to connect to {port}: {e}")
         return None
 
+def parse_sensor_data(line):
+    """Parse data from lines containing either G-force (MAG:) or Gyroscope (GYRO:) data"""
+    # Check for G-force data
+    mag_match = re.search(r'MAG:\s*(-?\d+)', line)
+    if mag_match:
+        return 'g_force', int(mag_match.group(1))
+    
+    # Check for Gyroscope data
+    gyro_match = re.search(r'MAG_GY:\s*(-?\d+)', line)
+    if gyro_match:
+        return 'gyroscope', int(gyro_match.group(1))
+    
+    return None, None
+
 def parse_accel_data(line):
-    """Parse data from line like 'MAG: 1234'"""
+    """Legacy function - parse data from line like 'MAG: 1234' (kept for backward compatibility)"""
     match = re.search(r'MAG:\s*(-?\d+)', line)
     if match:
         return int(match.group(1))
     return None
 
-def send_to_database(magnitude, hit_count):
+def send_to_database(magnitude, hit_count, gyro_data=None):
     """Send accelerometer event to database in your exact API format"""
     
     # Convert magnitude to G-force (acceleration in Gs)
     acceleration_g = magnitude / MAGNITUDE_SCALE
+    
+    # Convert gyroscope data to angular velocity (if available)
+    angular_velocity = gyro_data / GYROSCOPE_SCALE if gyro_data is not None else 0
     
     # Prepare data payload in the exact format required by your API
     payload = {
         "playerName": PLAYER_NAME,
         "team": TEAM_NAME,
         "occurredAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),  # ISO 8601 format
-        "accelerationG": acceleration_g
+        "accelerationG": acceleration_g,
+        "angularVelocity": angular_velocity
     }
     
     # HTTP headers as specified in your curl command
@@ -175,11 +223,13 @@ def test_database_connection():
 def main():
     """Main accelerometer monitoring loop"""
     
-    print("=== Accelerometer Database Monitor ===")
+    print("=== Accelerometer & Angular Velocity Monitor ===")
     print(f"Player: {PLAYER_NAME} ({TEAM_NAME})")
-    print(f"Threshold: {THRESHOLD}G")
+    print(f"G-Force Threshold: {THRESHOLD_G}G (sends to database)")
+    print(f"Angular Threshold: {THRESHOLD_GYRO} deg/s (terminal display only)")
     print(f"Database: {DATABASE_URL}")
     print(f"Send all data: {SEND_ALL_DATA}")
+    print("Note: Angular velocity data is displayed but not sent to database")
     print("=" * 40)
     
     # Test database connection first
@@ -208,8 +258,12 @@ def main():
     event_count = 0
     last_alert_time = 0
     
+    # Variables to track sensor readings
+    latest_g_force = None
+    latest_gyroscope = None
+    
     try:
-        print("\nListening for accelerometer data...")
+        print("\nListening for accelerometer and gyroscope data...")
         print("Press Ctrl+C to exit")
         print("-" * 50)
         
@@ -217,24 +271,25 @@ def main():
             # Read a line from the serial port
             line = ser.readline().decode('utf-8').rstrip()
             if line:
-                # Parse the accelerometer value
-                magnitude_raw = parse_accel_data(line)
+                # Parse the sensor data (could be G-force or gyroscope)
+                data_type, raw_value = parse_sensor_data(line)
             
-                if magnitude_raw is not None:
+                if data_type == 'g_force' and raw_value is not None:
                     hit_count += 1
-                    magnitude_g = magnitude_raw / MAGNITUDE_SCALE  # Convert to G-force
+                    latest_g_force = raw_value
+                    magnitude_g = raw_value / MAGNITUDE_SCALE  # Convert to G-force
                     
                     # Display reading
-                    print(f"Hit #{hit_count}: {magnitude_g:.2f}G", end="")
+                    print(f"Hit #{hit_count}: G-Force {magnitude_g:.2f}G", end="")
                     
-                    # Check if we should send to database
+                    # Check if we should send to database (only for G-force threshold)
                     should_send = False
                     
-                    if magnitude_g > THRESHOLD:
-                        # Threshold exceeded - check cooldown
+                    if magnitude_g > THRESHOLD_G:
+                        # G-force threshold exceeded - check cooldown
                         current_time = time.time()
                         if current_time - last_alert_time >= ALERT_COOLDOWN:
-                            print(f" 🚨 THRESHOLD EXCEEDED!")
+                            print(f" 🚨 G-FORCE THRESHOLD EXCEEDED!")
                             should_send = True
                             last_alert_time = current_time
                             
@@ -248,18 +303,45 @@ def main():
                             
                         else:
                             cooldown_remaining = ALERT_COOLDOWN - (current_time - last_alert_time)
-                            print(f" ⚠️ Threshold exceeded (cooldown: {cooldown_remaining:.1f}s)")
+                            print(f" ⚠️ G-force threshold exceeded (cooldown: {cooldown_remaining:.1f}s)")
                     else:
                         print("")  # Normal reading
                         if SEND_ALL_DATA:
                             should_send = True
                     
-                    # Send to database if needed
+                    # Send to database if needed (only G-force data is sent)
                     if should_send:
-                        success = send_to_database(magnitude_raw, hit_count)
+                        success = send_to_database(raw_value, hit_count, latest_gyroscope)
                         if success:
                             event_count += 1
+                        
+                        # Clear the serial buffer after recording a hit to prevent stale data
+                        ser.reset_input_buffer()
+                        print("  🗑️ Serial buffer cleared after hit recorded")
+                
+                elif data_type == 'gyroscope' and raw_value is not None:
+                    latest_gyroscope = raw_value
+                    gyro_value = raw_value / GYROSCOPE_SCALE  # Apply scaling if needed
                     
+                    # Display angular velocity (gyroscope) reading prominently
+                    print(f"Angular Velocity: {gyro_value:.2f} deg/s", end="")
+                    
+                    # Check gyroscope threshold (for monitoring purposes, not database)
+                    if abs(gyro_value) > THRESHOLD_GYRO:
+                        print(f" ⚠️ ANGULAR THRESHOLD EXCEEDED! ({gyro_value:.2f} deg/s)")
+                        print(f"  📊 High angular velocity detected - monitoring only (not sent to database)")
+                        
+                        # Trigger text-to-speech alert for angular velocity
+                        speak_angular_alert(PLAYER_NAME, gyro_value)
+                         # Add 5-second pause after threshold alert
+                        print("  ⏱️ Waiting 5 seconds for alert processing...")
+                        time.sleep(5)
+                        print("  ✅ Alert processing complete, resuming monitoring")
+                        # Note: Gyroscope threshold exceeded, but not sent to database yet
+                    else:
+                        print(" (normal angular velocity)")
+                    
+                    # Only print separator after gyroscope data (end of MAG+MAG_GY pair)
                     print("-" * 50)
                 
     except KeyboardInterrupt:
@@ -267,7 +349,8 @@ def main():
         print(f"Total hits recorded: {hit_count}")
         print(f"Events sent to database: {event_count}")
         print(f"Player: {PLAYER_NAME} ({TEAM_NAME})")
-        print(f"Threshold: {THRESHOLD}G")
+        print(f"G-Force Threshold: {THRESHOLD_G}G")
+        print(f"Gyroscope Threshold: {THRESHOLD_GYRO} deg/s")
     finally:
         ser.close()
         print("Serial connection closed.")
@@ -294,28 +377,34 @@ if __name__ == "__main__":
         import random
         import time
         
-        print("\nSimulating accelerometer readings (Ctrl+C to stop):")
+        print("\nSimulating accelerometer and gyroscope readings (Ctrl+C to stop):")
         hit_count = 0
         
         try:
             while True:
                 hit_count += 1
-                # Simulate readings - mostly normal, some above threshold
+                # Simulate G-force readings - mostly normal, some above threshold
                 if random.random() < 0.8:  # 80% normal readings
                     magnitude_raw = random.randint(50, 150)  # 0.5G to 1.5G
                 else:  # 20% above threshold
                     magnitude_raw = random.randint(250, 500)  # 2.5G to 5G
                 
-                magnitude_g = magnitude_raw / MAGNITUDE_SCALE
-                print(f"Hit #{hit_count}: {magnitude_g:.2f}G", end="")
+                # Simulate gyroscope readings
+                gyro_raw = random.randint(-800, 800)  # -800 to +800 deg/s
                 
-                if magnitude_g > THRESHOLD:
-                    print(f" 🚨 THRESHOLD EXCEEDED!")
+                magnitude_g = magnitude_raw / MAGNITUDE_SCALE
+                print(f"Hit #{hit_count}: G-Force {magnitude_g:.2f}G", end="")
+                
+                should_send = False
+                
+                if magnitude_g > THRESHOLD_G:
+                    print(f" 🚨 G-FORCE THRESHOLD EXCEEDED!")
+                    should_send = True
                     
                     # Trigger text-to-speech alert in simulation mode too
                     speak_alert(PLAYER_NAME, magnitude_g)
                     
-                    success = send_to_database(magnitude_raw, hit_count)
+                    success = send_to_database(magnitude_raw, hit_count, gyro_raw)
                     if success:
                         print("  ✅ Event sent successfully!")
                     else:
@@ -328,6 +417,17 @@ if __name__ == "__main__":
                     
                 else:
                     print(" (normal)")
+                
+                # Display angular velocity simulation data
+                gyro_scaled = gyro_raw / GYROSCOPE_SCALE
+                print(f"Angular Velocity: {gyro_scaled:.2f} deg/s", end="")
+                if abs(gyro_scaled) > THRESHOLD_GYRO:
+                    print(f" ⚠️ ANGULAR THRESHOLD EXCEEDED! ({gyro_scaled:.2f} deg/s)")
+                    print(f"  📊 High angular velocity detected - monitoring only (not sent to database)")
+                    print(f"  📐 Raw angular reading: {gyro_raw}")
+                else:
+                    print(" (normal angular velocity)")
+                    print(f"  📐 Raw angular reading: {gyro_raw}")
                 
                 print("-" * 50)
                 time.sleep(2)  # Wait 2 seconds between readings
