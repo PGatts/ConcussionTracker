@@ -18,7 +18,7 @@ import {
 type ChartType = "histogram" | "bar" | "pie";
 type NumericKey = "accelerationGNum" | "angularVelocityNum" | "occurredAtMs";
 type CategoricalKey = "team" | "playerName" | "timeYear";
-type Agg = "count" | "sum" | "avg" | "sumOmega";
+type Agg = "count" | "sum" | "avg" | "sumOmega" | "avgAngular";
 
 type Row = {
   id: string;
@@ -48,7 +48,7 @@ export function EventsChart(props: {
   groupBy?: CategoricalKey;
   agg?: Agg;
 }) {
-  const { rows, chartType, xVar, yVar, groupBy, agg = "count" } = props;
+  const { rows, chartType, xVar, groupBy, agg = "count" } = props;
 
   if (!rows?.length) {
     return <div className="text-sm text-gray-600">No data to chart.</div>;
@@ -209,12 +209,14 @@ export function EventsChart(props: {
     const groups = new Map<string, number[]>();
     for (const r of rows) {
       const key = getGroupKey(r, groupBy);
-      const v = Number.isFinite(r.accelerationGNum) ? r.accelerationGNum : 0;
+      const metric = agg === "avgAngular"
+        ? (Number.isFinite(r.angularVelocityNum ?? NaN) ? (r.angularVelocityNum as number) : 0)
+        : (Number.isFinite(r.accelerationGNum) ? r.accelerationGNum : 0);
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(v);
+      groups.get(key)!.push(metric);
     }
     const data = Array.from(groups.entries()).map(([name, arr]) => {
-      if (agg === "avg") {
+      if (agg === "avg" || agg === "avgAngular") {
         const sum = arr.reduce((a, b) => a + b, 0);
         return { name, value: arr.length ? sum / arr.length : 0 };
       }
@@ -230,7 +232,7 @@ export function EventsChart(props: {
           <YAxis allowDecimals={false} />
           <Tooltip />
           <Legend />
-          <Bar dataKey="value" name={agg === "avg" ? "Avg acceleration (g)" : "Count"} fill="#8b5cf6" />
+          <Bar dataKey="value" name={agg === "avg" ? "Avg acceleration (g)" : agg === "avgAngular" ? "Avg ω (°/s)" : "Count"} fill="#8b5cf6" />
         </BarChart>
       </ResponsiveContainer>
     );

@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import * as htmlToImage from "html-to-image";
 import {
   ColumnDef,
@@ -26,14 +27,16 @@ type Event = {
 
 type ChartType = "histogram" | "bar" | "pie";
 type XVar = "accelerationG" | "angularVelocity" | "occurredAt";
-type GroupBy = "team" | "playerName";
-type Agg = "count" | "sum" | "avg";
+type GroupBy = "team" | "playerName" | "timeYear";
+type Agg = "count" | "sum" | "avg" | "sumOmega" | "avgAngular";
 
 type UrlState = {
   playerName: string;
   team: string;
   accelMin: string;
   accelMax: string;
+  angularMin?: string;
+  angularMax?: string;
   timeFrom: string;
   timeTo: string;
   sortBy: "occurredAt" | "accelerationG" | "angularVelocity";
@@ -54,6 +57,8 @@ function useUrlState() {
       team: sp.get("team") || "",
       accelMin: sp.get("accelMin") || "",
       accelMax: sp.get("accelMax") || "",
+      angularMin: sp.get("angularMin") || "",
+      angularMax: sp.get("angularMax") || "",
       timeFrom: sp.get("timeFrom") || "",
       timeTo: sp.get("timeTo") || "",
       sortBy: (sp.get("sortBy") as UrlState["sortBy"]) || "occurredAt",
@@ -200,12 +205,12 @@ export function EventsTableClient() {
       const v = Number(urlState.accelMax);
       if (!Number.isNaN(v)) rows = rows.filter(r => r.accelerationG <= v);
     }
-    if ((urlState as any).angularMin) {
-      const v = Number((urlState as any).angularMin);
+    if (urlState.angularMin) {
+      const v = Number(urlState.angularMin);
       if (!Number.isNaN(v)) rows = rows.filter(r => r.angularVelocity >= v);
     }
-    if ((urlState as any).angularMax) {
-      const v = Number((urlState as any).angularMax);
+    if (urlState.angularMax) {
+      const v = Number(urlState.angularMax);
       if (!Number.isNaN(v)) rows = rows.filter(r => r.angularVelocity <= v);
     }
     if (urlState.timeFrom) {
@@ -224,7 +229,7 @@ export function EventsTableClient() {
     return rows;
   }, [data, urlState]);
 
-  type ChartRow = Event & { accelerationGNum: number; occurredAtMs: number };
+  type ChartRow = Event & { accelerationGNum: number; occurredAtMs: number; angularVelocityNum: number };
   const chartRows = React.useMemo<ChartRow[]>(() => {
     return (filtered ?? [])
       .map((r) => ({
@@ -390,7 +395,7 @@ export function EventsTableClient() {
   return (
     <div className="p-4">
       <div className="flex items-center justify-center mb-4">
-        <img src="/logo.png" alt="Happy Head" className="h-40 sm:h-56 md:h-72 object-contain" />
+        <Image src="/logo.png" alt="Happy Head" width={1200} height={300} className="h-40 sm:h-56 md:h-72 object-contain w-auto" priority />
       </div>
       
       
@@ -718,7 +723,8 @@ export function EventsTableClient() {
         </div>
         {showChart && (
           (() => {
-            const xVarKey: "occurredAtMs" | "accelerationGNum" = urlState.xVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
+            const xVarKey: "occurredAtMs" | "accelerationGNum" | "angularVelocityNum" =
+              urlState.xVar === "occurredAt" ? "occurredAtMs" : (urlState.xVar === "accelerationG" ? "accelerationGNum" : "angularVelocityNum");
             const yVarKey: "occurredAtMs" | "accelerationGNum" | "angularVelocityNum" =
               urlState.yVar === "occurredAt" ? "occurredAtMs" : (urlState.yVar === "accelerationG" ? "accelerationGNum" : "angularVelocityNum");
             return (
@@ -726,10 +732,10 @@ export function EventsTableClient() {
                 <EventsChart
                   rows={chartRows}
                   chartType={urlState.chartType}
-                  xVar={xVarKey as any}
-                  yVar={yVarKey as any}
-                  groupBy={urlState.groupBy}
-                  agg={urlState.agg}
+                  xVar={xVarKey}
+                  yVar={yVarKey}
+                  groupBy={urlState.groupBy as unknown as "team" | "playerName" | "timeYear"}
+                  agg={urlState.agg as unknown as "count" | "sum" | "avg" | "sumOmega"}
                 />
               </div>
             );
@@ -784,7 +790,7 @@ function PlayerMeta({ name, events }: PlayerMetaProps) {
   const { avgG, maxG, avgAV, maxAV } = React.useMemo(() => {
     if (playerEvents.length === 0) return { avgG: null as number | null, maxG: null as number | null, avgAV: null as number | null, maxAV: null as number | null };
     const gVals = playerEvents.map(e => Number(e.accelerationG)).filter(n => Number.isFinite(n));
-    const avVals = playerEvents.map(e => Number((e as any).angularVelocity)).filter(n => Number.isFinite(n));
+    const avVals = playerEvents.map(e => Number(e.angularVelocity)).filter(n => Number.isFinite(n));
     const avgGVal = gVals.length ? gVals.reduce((a, b) => a + b, 0) / gVals.length : null;
     const maxGVal = gVals.length ? Math.max(...gVals) : null;
     const avgAVVal = avVals.length ? avVals.reduce((a, b) => a + b, 0) / avVals.length : null;
