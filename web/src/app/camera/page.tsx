@@ -6,11 +6,10 @@ import Image from "next/image";
 import Link from "next/link";
 
 // Thresholds and timings
-const COLLISION_IOU_THRESHOLD = 0.05; // higher IoU threshold - faces must overlap more
+const COLLISION_IOU_THRESHOLD = 0.02; // higher IoU threshold - faces must overlap more
 const DEPTH_DIFF_MAX = 30;   // much stricter depth threshold - MediaPipe z values are small
 const DIST_3D_MAX = 150;     // much stricter 3D distance 
 const FRAMES_CONFIRM = 3;    // more frames to confirm real collision
-const CLIP_PRE_SECONDS = 5.0;
 const FPS = 30;
 const TASKS_VERSION = "0.10.14"; // pin to avoid CDN version mismatches
 const HITBOX_SCALE = 1.5; // make hitboxes larger
@@ -338,7 +337,7 @@ export default function CameraPage() {
           const confirmed = overlapStreakRef.current >= FRAMES_CONFIRM;
           if (confirmed && !currentlyOverlappingRef.current && !savingVideoRef.current) {
             setCollisionCount((c) => c + 1);
-            savingVideoRef.current = true; // Prevent multiple saves
+            savingVideoRef.current = true; // Prevent multiple saves for this collision
             
             // Save collision video - force stop current recording to capture latest footage
             if (recorderRef.current && recorderRef.current.state === 'recording') {
@@ -406,6 +405,12 @@ export default function CameraPage() {
               savingVideoRef.current = false; // Reset flag if we can't save
             }
           }
+          
+          // Reset saving flag when collision ends (no longer overlapping)
+          if (!confirmed && currentlyOverlappingRef.current) {
+            savingVideoRef.current = false; // Allow new collision videos to be saved
+          }
+          
           currentlyOverlappingRef.current = confirmed;
 
           // HUD
