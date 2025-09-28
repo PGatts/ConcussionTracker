@@ -236,11 +236,11 @@ export default function CameraPage() {
           // Start recorder once we have a valid frame rendered
           startRecorderIfNeeded();
 
-          if (!faceLandmarkerRef.current) return (video as any).requestVideoFrameCallback(onFrame);
+          if (!faceLandmarkerRef.current) return (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
           
           // Extra safety: ensure video element is fully loaded and playing
           if (video.paused || video.ended || video.seeking || video.currentTime === 0) {
-            return (video as any).requestVideoFrameCallback(onFrame);
+            return (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
           }
           
           let res: ReturnType<FaceLandmarker["detectForVideo"]> | undefined;
@@ -248,14 +248,15 @@ export default function CameraPage() {
             res = faceLandmarkerRef.current.detectForVideo(video, ts);
           } catch (err) {
             console.error("detectForVideo error", err);
-            return (video as any).requestVideoFrameCallback(onFrame);
+            return (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
           }
 
           const detections: { bbox: [number, number, number, number]; zMean: number; c3: [number, number, number] }[] = [];
           if (res && res.faceLandmarks) {
             for (const lms of res.faceLandmarks.slice(0, 2)) {
-              const bbox = bboxFromLandmarks(lms as any, canvas.width, canvas.height);
-              let z = 0, x = 0, y = 0, n = lms.length || 1;
+              const bbox = bboxFromLandmarks(lms as Array<{ x: number; y: number; z: number }>, canvas.width, canvas.height);
+              let z = 0, x = 0, y = 0;
+              const n = lms.length || 1;
               for (const lm of lms) { z += lm.z; x += lm.x; y += lm.y; }
               const zMean = z / n; const c3: [number, number, number] = [x / n, y / n, z / n];
               detections.push({ bbox, zMean, c3 });
@@ -357,16 +358,14 @@ export default function CameraPage() {
             ctx.fillText(debugInfo, 10, 60);
           }
 
-          (video as any).requestVideoFrameCallback(onFrame);
+          (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
         };
-        (video as any).requestVideoFrameCallback(onFrame);
+        (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
       } else {
         // setInterval fallback
         intervalId = window.setInterval(async () => {
           if (!running) return;
           const ts = lastTsRef.current + 1; lastTsRef.current = ts;
-          // mimic frame processing by delegating to draw/detect path via local call
-          const fakeMeta = { mediaTime: (ts/1000) } as any;
           // reuse RVFC handler by calling draw/detect inline
           const canvas = canvasRef.current!; const video = videoRef.current!; const ctx = canvas.getContext("2d")!;
           if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
@@ -385,8 +384,10 @@ export default function CameraPage() {
           const dets: { bbox: [number, number, number, number]; zMean: number; c3: [number, number, number] }[] = [];
           if (res && res.faceLandmarks) {
             for (const lms of res.faceLandmarks.slice(0,2)) {
-              const bbox = bboxFromLandmarks(lms as any, canvas.width, canvas.height);
-              let z = 0, x = 0, y = 0, n = lms.length || 1; for (const lm of lms){ z+=lm.z; x+=lm.x; y+=lm.y; }
+              const bbox = bboxFromLandmarks(lms as Array<{ x: number; y: number; z: number }>, canvas.width, canvas.height);
+              let z = 0, x = 0, y = 0;
+              const n = lms.length || 1; 
+              for (const lm of lms){ z+=lm.z; x+=lm.x; y+=lm.y; }
               dets.push({ bbox, zMean: z/n, c3: [x/n,y/n,z/n] });
               ctx.strokeStyle = "#00FF00"; ctx.lineWidth = 2; ctx.strokeRect(bbox[0], bbox[1], bbox[2]-bbox[0], bbox[3]-bbox[1]);
               drawHelmet(ctx, bbox);
