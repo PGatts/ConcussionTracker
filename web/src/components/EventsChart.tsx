@@ -85,19 +85,6 @@ export function EventsChart(props: {
     return data;
   }
 
-  const COLORS = [
-    "#8b5cf6", // violet-500
-    "#a78bfa", // violet-400
-    "#7c3aed", // violet-600
-    "#c4b5fd", // violet-300
-    "#6d28d9", // violet-700
-    "#d8b4fe", // purple-300
-    "#9333ea", // purple-600
-    "#a855f7", // purple-500
-    "#e9d5ff", // purple-200
-    "#581c87"  // purple-900
-  ];
-
   // For the pie chart specifically: start with purple and yellow, then cycle other distinct colors
   const PIE_COLORS = [
     "#8b5cf6", // purple (violet-500)
