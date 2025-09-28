@@ -224,7 +224,7 @@ export default function CameraPage() {
 
           // CRITICAL: Ensure canvas has valid non-zero dimensions before any WebGL operations
           if (canvas.width <= 0 || canvas.height <= 0) {
-            return (video as any).requestVideoFrameCallback(onFrame);
+            return videoWithRVFC.requestVideoFrameCallback!(onFrame);
           }
 
           const tsRaw = Math.floor(((meta?.mediaTime ?? video.currentTime) as number) * 1000);
