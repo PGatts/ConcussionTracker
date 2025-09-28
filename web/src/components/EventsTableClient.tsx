@@ -309,7 +309,7 @@ export function EventsTableClient() {
                 <select
                   className="border rounded px-1 py-1 text-sm h-8 w-full"
           value={urlState.chartType}
-                  onChange={e => setUrlState(s => ({ ...s, chartType: e.target.value as any }))}
+                  onChange={e => setUrlState(s => ({ ...s, chartType: e.target.value as ChartType }))}
                 >
                   <option value="histogram">Histogram</option>
                   <option value="bar">Bar</option>
@@ -323,7 +323,7 @@ export function EventsTableClient() {
                   <select
                     className="border rounded px-1 py-1 text-sm h-8 w-full"
                     value={urlState.xVar}
-                    onChange={e => setUrlState(s => ({ ...s, xVar: e.target.value as any }))}
+                    onChange={e => setUrlState(s => ({ ...s, xVar: e.target.value as XVar }))}
                   >
                     <option value="accelerationG">Acceleration (g)</option>
                     <option value="occurredAt">Time</option>
@@ -352,7 +352,7 @@ export function EventsTableClient() {
                     <select
                       className="border rounded px-1 py-1 text-sm h-8 w-full"
                       value={urlState.groupBy}
-                      onChange={e => setUrlState(s => ({ ...s, groupBy: e.target.value as any }))}
+                      onChange={e => setUrlState(s => ({ ...s, groupBy: e.target.value as GroupBy }))}
                     >
                       <option value="team">Team</option>
                       <option value="playerName">Player</option>
@@ -363,7 +363,7 @@ export function EventsTableClient() {
                     <select
                       className="border rounded px-1 py-1 text-sm h-8 w-full"
                       value={urlState.agg}
-                      onChange={e => setUrlState(s => ({ ...s, agg: e.target.value as any }))}
+                      onChange={e => setUrlState(s => ({ ...s, agg: e.target.value as Agg }))}
                     >
                       <option value="count">Count</option>
                       {urlState.chartType === "pie" ? (
