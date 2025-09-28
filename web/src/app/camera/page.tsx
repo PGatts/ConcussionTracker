@@ -87,7 +87,7 @@ export default function CameraPage() {
 
     async function setup() {
       // get webcam
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 800, height: 600 }, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
       await new Promise((res) => {
@@ -97,8 +97,9 @@ export default function CameraPage() {
       try { await videoRef.current.play(); } catch {}
       // Ensure the hidden video has non-zero layout size to appease some WebGL paths
       try {
-        (videoRef.current as any).width = videoRef.current.videoWidth || 640;
-        (videoRef.current as any).height = videoRef.current.videoHeight || 480;
+        const videoElement = videoRef.current as HTMLVideoElement & { width: number; height: number };
+        videoElement.width = videoRef.current.videoWidth || 640;
+        videoElement.height = videoRef.current.videoHeight || 480;
       } catch {}
 
       if (!canvasRef.current || !videoRef.current) return;
@@ -130,7 +131,6 @@ export default function CameraPage() {
         
         const [x1, y1, x2, y2] = bbox;
         const bboxWidth = x2 - x1;
-        const bboxHeight = y2 - y1;
         
         // Helmet size - 1.5x the face width (halfway between 1.2x and 1.8x)
         const helmetWidth = bboxWidth * 1.5;
@@ -208,10 +208,11 @@ export default function CameraPage() {
       faceLandmarkerRef.current = lm;
 
       // main loop: prefer requestVideoFrameCallback; fall back to setInterval
-      if (typeof (video as any).requestVideoFrameCallback === "function") {
+      const videoWithRVFC = video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: (now: number, meta: { mediaTime: number }) => void) => void };
+      if (typeof videoWithRVFC.requestVideoFrameCallback === "function") {
         const onFrame = async (_now: number, meta: { mediaTime: number }) => {
           if (!running) return;
-          if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return (video as any).requestVideoFrameCallback(onFrame);
+          if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return videoWithRVFC.requestVideoFrameCallback!(onFrame);
 
           // Resize canvas if video dimensions changed (prevents zero-size framebuffer errors)
           if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -236,11 +237,11 @@ export default function CameraPage() {
           // Start recorder once we have a valid frame rendered
           startRecorderIfNeeded();
 
-          if (!faceLandmarkerRef.current) return (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
+          if (!faceLandmarkerRef.current) return videoWithRVFC.requestVideoFrameCallback!(onFrame);
           
           // Extra safety: ensure video element is fully loaded and playing
           if (video.paused || video.ended || video.seeking || video.currentTime === 0) {
-            return (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
+            return videoWithRVFC.requestVideoFrameCallback!(onFrame);
           }
           
           let res: ReturnType<FaceLandmarker["detectForVideo"]> | undefined;
@@ -248,7 +249,7 @@ export default function CameraPage() {
             res = faceLandmarkerRef.current.detectForVideo(video, ts);
           } catch (err) {
             console.error("detectForVideo error", err);
-            return (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
+            return videoWithRVFC.requestVideoFrameCallback!(onFrame);
           }
 
           const detections: { bbox: [number, number, number, number]; zMean: number; c3: [number, number, number] }[] = [];
@@ -358,9 +359,9 @@ export default function CameraPage() {
             ctx.fillText(debugInfo, 10, 60);
           }
 
-          (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
+          videoWithRVFC.requestVideoFrameCallback!(onFrame);
         };
-        (video as HTMLVideoElement & { requestVideoFrameCallback: (callback: (now: number, meta: { mediaTime: number }) => void) => void }).requestVideoFrameCallback(onFrame);
+        videoWithRVFC.requestVideoFrameCallback!(onFrame);
       } else {
         // setInterval fallback
         intervalId = window.setInterval(async () => {
@@ -411,7 +412,9 @@ export default function CameraPage() {
       running = false;
       if (intervalId) clearInterval(intervalId);
       try { recorderRef.current?.stop(); } catch {}
-      (videoRef.current?.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
+      // Capture video ref value to avoid stale reference warning
+      const currentVideo = videoRef.current;
+      (currentVideo?.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
       try { faceLandmarkerRef.current?.close?.(); } catch {}
       faceLandmarkerRef.current = null;
       initializedRef.current = false;
