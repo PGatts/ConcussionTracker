@@ -33,8 +33,8 @@ except ImportError:
     SEND_ALL_DATA = False
     DATABASE_URL = "http://concussion-tracker.vercel.app/api/admin/events"
     API_KEY = "86efb20047e0b0f2b4dc40cc9c2b33c805239c72830c09b66de15b164eac0d58"
-    PLAYER_NAME = "Gonzalo Gonzalez"
-    TEAM_NAME = "Falcons"
+    PLAYER_NAME = "Fernando Emilio Amado-Pupo"
+    TEAM_NAME = "Miami Heat"
     SERIAL_PORT = 'COM4'
     BAUDRATE = 38400
     MAGNITUDE_SCALE = 100
@@ -285,32 +285,59 @@ def main():
                     print(f"Hit #{hit_count}: G-Force {magnitude_g:.2f}G")
                 
                 elif data_type == 'gyroscope' and raw_value is not None and waiting_for_gyroscope:
-                    # Now we have both readings - process them together
+                    # Now we have both readings - process them together as a complete pair
                     latest_gyroscope = raw_value
                     waiting_for_gyroscope = False
                     gyro_value = raw_value / GYROSCOPE_SCALE  # Apply scaling if needed
                     magnitude_g = latest_g_force / MAGNITUDE_SCALE  # Recalculate for processing
                     
-                    # Display angular velocity reading
-                    print(f"Angular Velocity: {gyro_value:.2f} deg/s")
+                    # Display both readings together as a pair
+                    print(f"  ↳ Angular Velocity: {gyro_value:.2f} deg/s")
+                    print(f"  📊 Complete Sensor Pair: G-Force={magnitude_g:.2f}G, Angular={gyro_value:.2f} deg/s")
                     
-                    # Now check both thresholds and determine if we should send to database
-                    should_send = False
+                    # Check both thresholds
                     g_threshold_exceeded = magnitude_g > THRESHOLD_G
                     ang_threshold_exceeded = abs(gyro_value) > THRESHOLD_GYRO
                     
-                    # Handle G-force threshold
-                    if g_threshold_exceeded:
+                    # Determine alert priority and database send logic
+                    should_send = False
+                    alert_type = "none"
+                    
+                    if g_threshold_exceeded and ang_threshold_exceeded:
+                        # Both thresholds exceeded - G-force takes priority as "dangerous hit"
+                        alert_type = "dangerous_hit"
+                        print(f"  🚨🚨 DANGEROUS HIT DETECTED! 🚨🚨")
+                        print(f"      G-Force: {magnitude_g:.2f}G > {THRESHOLD_G}G threshold")
+                        print(f"      Angular: {gyro_value:.2f} deg/s > {THRESHOLD_GYRO} deg/s threshold")
+                        print(f"      Priority: G-FORCE (Head Impact)")
+                        
+                        current_time = time.time()
+                        if current_time - last_alert_time >= ALERT_COOLDOWN:
+                            should_send = True
+                            last_alert_time = current_time
+                            
+                            # G-force alert takes priority for dangerous hits
+                            speak_alert(PLAYER_NAME, magnitude_g)
+                            print("  ⏱️ Waiting 5 seconds for dangerous hit alert processing...")
+                            time.sleep(3)  # Shorter pause, then add angular alert
+                            speak_angular_alert(PLAYER_NAME, gyro_value)
+                            time.sleep(2)
+                            print("  ✅ Dangerous hit alert processing complete")
+                            
+                        else:
+                            cooldown_remaining = ALERT_COOLDOWN - (current_time - last_alert_time)
+                            print(f"      ⚠️ Dangerous hit detected (cooldown: {cooldown_remaining:.1f}s)")
+                    
+                    elif g_threshold_exceeded:
+                        # Only G-force threshold exceeded
+                        alert_type = "g_force"
                         current_time = time.time()
                         if current_time - last_alert_time >= ALERT_COOLDOWN:
                             print(f"  🚨 G-FORCE THRESHOLD EXCEEDED! ({magnitude_g:.2f}G)")
                             should_send = True
                             last_alert_time = current_time
                             
-                            # Trigger text-to-speech alert
                             speak_alert(PLAYER_NAME, magnitude_g)
-                            
-                            # Add 5-second pause after threshold alert
                             print("  ⏱️ Waiting 5 seconds for G-force alert processing...")
                             time.sleep(5)
                             print("  ✅ G-force alert processing complete")
@@ -319,37 +346,44 @@ def main():
                             cooldown_remaining = ALERT_COOLDOWN - (current_time - last_alert_time)
                             print(f"  ⚠️ G-force threshold exceeded (cooldown: {cooldown_remaining:.1f}s)")
                     
-                    # Handle Angular velocity threshold
-                    if ang_threshold_exceeded:
+                    elif ang_threshold_exceeded:
+                        # Only Angular velocity threshold exceeded
+                        alert_type = "angular"
                         print(f"  ⚠️ ANGULAR THRESHOLD EXCEEDED! ({gyro_value:.2f} deg/s)")
                         should_send = True
                         
-                        # Trigger text-to-speech alert for angular velocity
                         speak_angular_alert(PLAYER_NAME, gyro_value)
-                        
-                        print("  ⏱️ Waiting 5 seconds for angular alert processing...")
-                        time.sleep(5)
+                        print("  ⏱️ Waiting 3 seconds for angular alert processing...")
+                        time.sleep(3)  # Shorter pause for angular-only alerts
                         print("  ✅ Angular alert processing complete")
                     
-                    # Handle normal readings
-                    if not g_threshold_exceeded and not ang_threshold_exceeded:
-                        print("  ✅ Both readings normal")
+                    else:
+                        # Neither threshold exceeded
+                        print("  ✅ Both readings within normal limits")
                         if SEND_ALL_DATA:
                             should_send = True
+                            alert_type = "all_data"
                     
-                    # Send to database if needed (now includes both G-force and angular velocity)
+                    # Send to database with priority indication
                     if should_send:
-                        print(f"  📊 Sending to database: G={magnitude_g:.2f}G, Angular={gyro_value:.2f} deg/s")
+                        priority_msg = {
+                            "dangerous_hit": "🚨 DANGEROUS HIT",
+                            "g_force": "⚠️ G-FORCE EVENT", 
+                            "angular": "🔄 ANGULAR EVENT",
+                            "all_data": "📊 DATA LOG"
+                        }.get(alert_type, "📊 EVENT")
+                        
+                        print(f"  � Sending {priority_msg}: G={magnitude_g:.2f}G, Angular={gyro_value:.2f} deg/s")
                         success = send_to_database(latest_g_force, hit_count, raw_value)
                         if success:
                             event_count += 1
-                            print("  ✅ Event sent to database successfully!")
+                            print(f"  ✅ {priority_msg} sent to database successfully!")
                         else:
-                            print("  ❌ Failed to send event to database")
+                            print(f"  ❌ Failed to send {priority_msg} to database")
                         
                         # Clear the serial buffer after recording a hit to prevent stale data
                         ser.reset_input_buffer()
-                        print("  🗑️ Serial buffer cleared after hit recorded")
+                        print("  🗑️ Serial buffer cleared after event recorded")
                     
                     # Only print separator after processing the complete pair
                     print("-" * 50)
