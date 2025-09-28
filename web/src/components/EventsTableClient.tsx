@@ -22,8 +22,30 @@ type Event = {
   accelerationG: number;
 };
 
+type ChartType = "histogram" | "bar" | "pie";
+type XVar = "accelerationG" | "occurredAt";
+type GroupBy = "team" | "playerName";
+type Agg = "count" | "sum" | "avg";
+
+type UrlState = {
+  playerName: string;
+  team: string;
+  accelMin: string;
+  accelMax: string;
+  timeFrom: string;
+  timeTo: string;
+  sortBy: "occurredAt" | "accelerationG";
+  order: "asc" | "desc";
+  chartType: ChartType;
+  xVar: XVar;
+  yVar: XVar;
+  groupBy: GroupBy;
+  agg: Agg;
+  binCount: string;
+};
+
 function useUrlState() {
-  const [state, setState] = React.useState(() => {
+  const [state, setState] = React.useState<UrlState>(() => {
     const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     return {
       playerName: sp.get("playerName") || "",
@@ -35,11 +57,11 @@ function useUrlState() {
       sortBy: (sp.get("sortBy") as "occurredAt" | "accelerationG") || "occurredAt",
       order: (sp.get("order") as "asc" | "desc") || "desc",
       // chart config
-      chartType: (sp.get("chartType") as "histogram" | "bar" | "pie") || "histogram",
-      xVar: (sp.get("xVar") as "accelerationG" | "occurredAt") || "accelerationG",
-      yVar: (sp.get("yVar") as "accelerationG" | "occurredAt") || "occurredAt",
-      groupBy: (sp.get("groupBy") as "team" | "playerName") || "team",
-      agg: (sp.get("agg") as "count" | "sum" | "avg") || "count",
+      chartType: (sp.get("chartType") as ChartType) || "histogram",
+      xVar: (sp.get("xVar") as XVar) || "accelerationG",
+      yVar: (sp.get("yVar") as XVar) || "occurredAt",
+      groupBy: (sp.get("groupBy") as GroupBy) || "team",
+      agg: (sp.get("agg") as Agg) || "count",
       binCount: sp.get("binCount") || "20",
     };
   });
@@ -121,14 +143,15 @@ export function EventsTableClient() {
     return rows;
   }, [data, urlState]);
 
-  const chartRows = React.useMemo(() => {
+  type ChartRow = Event & { accelerationGNum: number; occurredAtMs: number };
+  const chartRows = React.useMemo<ChartRow[]>(() => {
     return (filtered ?? [])
-      .map(r => ({
+      .map((r) => ({
         ...r,
-        accelerationGNum: Number((r as any).accelerationG),
+        accelerationGNum: Number(r.accelerationG),
         occurredAtMs: Date.parse(r.occurredAt),
       }))
-      .filter(r => Number.isFinite((r as any).accelerationGNum) && Number.isFinite((r as any).occurredAtMs));
+      .filter((r) => Number.isFinite(r.accelerationGNum) && Number.isFinite(r.occurredAtMs));
   }, [filtered]);
 
   const table = useReactTable({
@@ -149,16 +172,16 @@ export function EventsTableClient() {
 
   // Coerce unsupported agg options when switching chart types so the select has valid value
   React.useEffect(() => {
-    setUrlState(s => {
-      if ((s as any).chartType === "pie" && (s as any).agg === "avg") {
-        return { ...s, agg: "count" as any };
+    setUrlState((s) => {
+      if (s.chartType === "pie" && s.agg === "avg") {
+        return { ...s, agg: "count" };
       }
-      if ((s as any).chartType === "bar" && (s as any).agg === "sum") {
-        return { ...s, agg: "avg" as any };
+      if (s.chartType === "bar" && s.agg === "sum") {
+        return { ...s, agg: "avg" };
       }
       return s;
     });
-  }, [(urlState as any).chartType, setUrlState]);
+  }, [urlState.chartType, setUrlState]);
 
   if (!data) return <div className="p-4">Loading…</div>;
 
@@ -285,7 +308,7 @@ export function EventsTableClient() {
                 <span className="text-sm text-gray-600">Chart type</span>
                 <select
                   className="border rounded px-1 py-1 text-sm h-8 w-full"
-                  value={(urlState as any).chartType}
+          value={urlState.chartType}
                   onChange={e => setUrlState(s => ({ ...s, chartType: e.target.value as any }))}
                 >
                   <option value="histogram">Histogram</option>
@@ -294,12 +317,12 @@ export function EventsTableClient() {
                 </select>
               </div>
 
-              {(urlState as any).chartType === "histogram" && (
+              {urlState.chartType === "histogram" && (
                 <div className="flex flex-col gap-1">
                   <span className="text-sm text-gray-600">X axis</span>
                   <select
                     className="border rounded px-1 py-1 text-sm h-8 w-full"
-                    value={(urlState as any).xVar}
+                    value={urlState.xVar}
                     onChange={e => setUrlState(s => ({ ...s, xVar: e.target.value as any }))}
                   >
                     <option value="accelerationG">Acceleration (g)</option>
@@ -308,7 +331,7 @@ export function EventsTableClient() {
                 </div>
               )}
 
-              {(urlState as any).chartType === "histogram" && (
+              {urlState.chartType === "histogram" && (
                 <div className="flex flex-col gap-1">
                   <span className="text-sm text-gray-600">Bin count</span>
                   <input
@@ -316,19 +339,19 @@ export function EventsTableClient() {
                     min={1}
                     max={200}
                     className="border rounded px-1 py-1 text-sm h-8 w-full"
-                    value={(urlState as any).binCount}
+                    value={urlState.binCount}
                     onChange={e => setUrlState(s => ({ ...s, binCount: e.target.value }))}
                   />
                 </div>
               )}
 
-              {((urlState as any).chartType === "bar" || (urlState as any).chartType === "pie") && (
+              {(urlState.chartType === "bar" || urlState.chartType === "pie") && (
                 <>
                   <div className="flex flex-col gap-1">
                     <span className="text-sm text-gray-600">Group by</span>
                     <select
                       className="border rounded px-1 py-1 text-sm h-8 w-full"
-                      value={(urlState as any).groupBy}
+                      value={urlState.groupBy}
                       onChange={e => setUrlState(s => ({ ...s, groupBy: e.target.value as any }))}
                     >
                       <option value="team">Team</option>
@@ -339,11 +362,11 @@ export function EventsTableClient() {
                     <span className="text-sm text-gray-600">Aggregation</span>
                     <select
                       className="border rounded px-1 py-1 text-sm h-8 w-full"
-                      value={(urlState as any).agg}
+                      value={urlState.agg}
                       onChange={e => setUrlState(s => ({ ...s, agg: e.target.value as any }))}
                     >
                       <option value="count">Count</option>
-                      {(urlState as any).chartType === "pie" ? (
+                      {urlState.chartType === "pie" ? (
                         <option value="sum">Sum of g</option>
                       ) : (
                         <option value="avg">Avg g</option>
@@ -387,15 +410,22 @@ export function EventsTableClient() {
           </div>
         </div>
         {showChart && (
-        <EventsChart
-          rows={chartRows as any}
-          chartType={(urlState as any).chartType as any}
-          xVar={((urlState as any).xVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum") as any}
-          yVar={((urlState as any).yVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum") as any}
-          groupBy={(urlState as any).groupBy as any}
-          agg={(urlState as any).agg as any}
-          binCount={Number((urlState as any).binCount) || 20}
-        />
+          (() => {
+            const xVarKey: "occurredAtMs" | "accelerationGNum" = urlState.xVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
+            const yVarKey: "occurredAtMs" | "accelerationGNum" = urlState.yVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
+            const binNum = Number(urlState.binCount) || 20;
+            return (
+              <EventsChart
+                rows={chartRows}
+                chartType={urlState.chartType}
+                xVar={xVarKey}
+                yVar={yVarKey}
+                groupBy={urlState.groupBy}
+                agg={urlState.agg}
+                binCount={binNum}
+              />
+            );
+          })()
         )}
       </div>
     </div>
