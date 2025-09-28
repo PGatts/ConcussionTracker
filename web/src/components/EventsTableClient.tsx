@@ -3,6 +3,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import Link from "next/link";
 import * as htmlToImage from "html-to-image";
 import {
   ColumnDef,
@@ -395,7 +396,9 @@ export function EventsTableClient() {
   return (
     <div className="p-4">
       <div className="flex items-center justify-center mb-4">
-        <Image src="/logo.png" alt="Happy Head" width={1200} height={300} className="h-40 sm:h-56 md:h-72 object-contain w-auto" priority />
+        <Link href="/">
+          <Image src="/logo.png" alt="Happy Head" width={1200} height={300} className="h-40 sm:h-56 md:h-72 object-contain w-auto cursor-pointer hover:opacity-80 transition-opacity" priority />
+        </Link>
       </div>
       
       
