@@ -15,7 +15,16 @@
 /* Force light theme: remove dark override */
 
 body {
-  background: var(--background);
+  /* Full-page light blue gradient background, fixed so it continues while scrolling */
+  background: linear-gradient(90deg, #bfdbfe 0%, #93c5fd 50%, #bfdbfe 100%);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+html, body {
+  min-height: 100%;
+  height: 100%;
+  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
 }
