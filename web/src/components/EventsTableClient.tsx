@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import {
   ColumnDef,
   flexRender,
@@ -11,6 +12,8 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
+const EventsChart = dynamic(() => import("./EventsChart"), { ssr: false });
+
 type Event = {
   id: string;
   playerName: string;
@@ -19,8 +22,30 @@ type Event = {
   accelerationG: number;
 };
 
+type ChartType = "histogram" | "bar" | "pie";
+type XVar = "accelerationG" | "occurredAt";
+type GroupBy = "team" | "playerName";
+type Agg = "count" | "sum" | "avg";
+
+type UrlState = {
+  playerName: string;
+  team: string;
+  accelMin: string;
+  accelMax: string;
+  timeFrom: string;
+  timeTo: string;
+  sortBy: "occurredAt" | "accelerationG";
+  order: "asc" | "desc";
+  chartType: ChartType;
+  xVar: XVar;
+  yVar: XVar;
+  groupBy: GroupBy;
+  agg: Agg;
+  binCount: string;
+};
+
 function useUrlState() {
-  const [state, setState] = React.useState(() => {
+  const [state, setState] = React.useState<UrlState>(() => {
     const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     return {
       playerName: sp.get("playerName") || "",
@@ -31,6 +56,13 @@ function useUrlState() {
       timeTo: sp.get("timeTo") || "",
       sortBy: (sp.get("sortBy") as "occurredAt" | "accelerationG") || "occurredAt",
       order: (sp.get("order") as "asc" | "desc") || "desc",
+      // chart config
+      chartType: (sp.get("chartType") as ChartType) || "histogram",
+      xVar: (sp.get("xVar") as XVar) || "accelerationG",
+      yVar: (sp.get("yVar") as XVar) || "occurredAt",
+      groupBy: (sp.get("groupBy") as GroupBy) || "team",
+      agg: (sp.get("agg") as Agg) || "count",
+      binCount: sp.get("binCount") || "20",
     };
   });
 
@@ -47,6 +79,9 @@ function useUrlState() {
 export function EventsTableClient() {
   const [urlState, setUrlState] = useUrlState();
   const [showFilters, setShowFilters] = React.useState(false);
+  const [showTable, setShowTable] = React.useState(true);
+  const [showChart, setShowChart] = React.useState(true);
+  const [showChartOptions, setShowChartOptions] = React.useState(false);
   const { data } = useQuery({
     queryKey: ["events-all"],
     queryFn: async () => {
@@ -108,6 +143,17 @@ export function EventsTableClient() {
     return rows;
   }, [data, urlState]);
 
+  type ChartRow = Event & { accelerationGNum: number; occurredAtMs: number };
+  const chartRows = React.useMemo<ChartRow[]>(() => {
+    return (filtered ?? [])
+      .map((r) => ({
+        ...r,
+        accelerationGNum: Number(r.accelerationG),
+        occurredAtMs: Date.parse(r.occurredAt),
+      }))
+      .filter((r) => Number.isFinite(r.accelerationGNum) && Number.isFinite(r.occurredAtMs));
+  }, [filtered]);
+
   const table = useReactTable({
     data: filtered,
     columns,
@@ -124,50 +170,80 @@ export function EventsTableClient() {
     }
   }, [sorting, setUrlState]);
 
+  // Coerce unsupported agg options when switching chart types so the select has valid value
+  React.useEffect(() => {
+    setUrlState((s) => {
+      if (s.chartType === "pie" && s.agg === "avg") {
+        return { ...s, agg: "count" };
+      }
+      if (s.chartType === "bar" && s.agg === "sum") {
+        return { ...s, agg: "avg" };
+      }
+      return s;
+    });
+  }, [urlState.chartType, setUrlState]);
+
   if (!data) return <div className="p-4">Loading…</div>;
 
   return (
     <div className="p-4">
       <h1 className="text-4xl font-bold mb-6 text-center">Concussion Events</h1>
-      <div className="">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-          onClick={() => setShowFilters((v) => !v)}
-          aria-expanded={showFilters}
-          aria-controls="filters-panel"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="h-4 w-4"
-            aria-hidden="true"
-          >
-            <path d="M3 5.25A.75.75 0 0 1 3.75 4.5h16.5a.75.75 0 0 1 .53 1.28L15 11.06v6.69a.75.75 0 0 1-1.1.67l-3-1.5a.75.75 0 0 1-.4-.67v-5.19L3.22 5.78A.75.75 0 0 1 3 5.25Z" />
-          </svg>
-          {showFilters ? "Hide filters" : "Show filters"}
-        </button>
-      </div>
-      {showFilters && (
-      <div id="filters-panel" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 mb-4 items-end">
-        <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Player" value={urlState.playerName} onChange={e=>setUrlState(s=>({ ...s, playerName: e.target.value }))} />
-        <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Team" value={urlState.team} onChange={e=>setUrlState(s=>({ ...s, team: e.target.value }))} />
-        <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Min accel (m/s^2)" value={urlState.accelMin} onChange={e=>setUrlState(s=>({ ...s, accelMin: e.target.value }))} />
-        <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Max accel (m/s^2)" value={urlState.accelMax} onChange={e=>setUrlState(s=>({ ...s, accelMax: e.target.value }))} />
-        <div className="flex flex-col gap-1">
-          <span className="text-sm text-gray-600">From</span>
-          <input type="date" className="border rounded px-1 py-1 text-sm h-8 w-full" value={urlState.timeFrom} onChange={e=>setUrlState(s=>({ ...s, timeFrom: e.target.value }))} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-sm text-gray-600">To</span>
-          <input type="date" className="border rounded px-1 py-1 text-sm h-8 w-full" value={urlState.timeTo} onChange={e=>setUrlState(s=>({ ...s, timeTo: e.target.value }))} />
-        </div>
-      </div>
-      )}
+      
 
-      <div className="overflow-x-auto border rounded mt-4">
-        <table className="min-w-full text-sm table-fixed">
+      
+
+      <div className={`mt-8 border rounded p-4 ${!showTable ? 'flex flex-col justify-center min-h-[120px]' : ''}`}>
+        <div className="flex items-center justify-between mb-3 relative">
+          <h3 className="text-xl font-semibold">Table</h3>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+              onClick={() => setShowFilters((v) => !v)}
+              aria-expanded={showFilters}
+              aria-controls="table-filters"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M3 5.25A.75.75 0 0 1 3.75 4.5h16.5a.75.75 0 0 1 .53 1.28L15 11.06v6.69a.75.75 0 0 1-1.1.67l-3-1.5a.75.75 0 0 1-.4-.67v-5.19L3.22 5.78A.75.75 0 0 1 3 5.25Z" />
+              </svg>
+              {showFilters ? "Hide filters" : "Show filters"}
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+              onClick={() => setShowTable(v => !v)}
+              aria-expanded={showTable}
+              aria-controls="events-table"
+            >
+              {showTable ? "Hide table" : "Show table"}
+            </button>
+          </div>
+        </div>
+        {showFilters && (
+          <div id="table-filters" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 mb-4 items-end">
+            <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Player" value={urlState.playerName} onChange={e=>setUrlState(s=>({ ...s, playerName: e.target.value }))} />
+            <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Team" value={urlState.team} onChange={e=>setUrlState(s=>({ ...s, team: e.target.value }))} />
+            <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Min accel (g)" value={urlState.accelMin} onChange={e=>setUrlState(s=>({ ...s, accelMin: e.target.value }))} />
+            <input className="border rounded px-1 py-1 text-sm h-8 w-full" placeholder="Max accel (g)" value={urlState.accelMax} onChange={e=>setUrlState(s=>({ ...s, accelMax: e.target.value }))} />
+            <div className="flex flex-col gap-1">
+              <span className="text-sm text-gray-600">From</span>
+              <input type="date" className="border rounded px-1 py-1 text-sm h-8 w-full" value={urlState.timeFrom} onChange={e=>setUrlState(s=>({ ...s, timeFrom: e.target.value }))} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm text-gray-600">To</span>
+              <input type="date" className="border rounded px-1 py-1 text-sm h-8 w-full" value={urlState.timeTo} onChange={e=>setUrlState(s=>({ ...s, timeTo: e.target.value }))} />
+            </div>
+          </div>
+        )}
+        {showTable && (
+        <div id="events-table" className="overflow-x-auto overflow-y-auto max-h-[520px]">
+          <table className="min-w-full text-sm table-fixed">
           <thead className="bg-gray-50">
             {table.getHeaderGroups().map(hg => (
               <tr key={hg.id}>
@@ -213,7 +289,144 @@ export function EventsTableClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
+        )}
+      </div>
+
+      <div className="mt-8 border rounded p-4">
+        <div className={`${!showChart ? 'flex flex-col justify-center min-h-[120px]' : ''}`}>
+          <div className="flex items-center justify-between mb-3 relative">
+            <h2 className="text-xl font-semibold">Chart</h2>
+          <div className="flex items-center gap-4">
+            <div
+              id="chart-options"
+              className={`${showChartOptions ? 'grid' : 'grid invisible'} grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 items-start`}
+              aria-hidden={!showChartOptions}
+            >
+              <div className="flex flex-col gap-1">
+                <span className="text-sm text-gray-600">Chart type</span>
+                <select
+                  className="border rounded px-1 py-1 text-sm h-8 w-full"
+          value={urlState.chartType}
+                  onChange={e => setUrlState(s => ({ ...s, chartType: e.target.value as ChartType }))}
+                >
+                  <option value="histogram">Histogram</option>
+                  <option value="bar">Bar</option>
+                  <option value="pie">Pie</option>
+                </select>
+              </div>
+
+              {urlState.chartType === "histogram" && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm text-gray-600">X axis</span>
+                  <select
+                    className="border rounded px-1 py-1 text-sm h-8 w-full"
+                    value={urlState.xVar}
+                    onChange={e => setUrlState(s => ({ ...s, xVar: e.target.value as XVar }))}
+                  >
+                    <option value="accelerationG">Acceleration (g)</option>
+                    <option value="occurredAt">Time</option>
+                  </select>
+                </div>
+              )}
+
+              {urlState.chartType === "histogram" && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm text-gray-600">Bin count</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    className="border rounded px-1 py-1 text-sm h-8 w-full"
+                    value={urlState.binCount}
+                    onChange={e => setUrlState(s => ({ ...s, binCount: e.target.value }))}
+                  />
+                </div>
+              )}
+
+              {(urlState.chartType === "bar" || urlState.chartType === "pie") && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm text-gray-600">Group by</span>
+                    <select
+                      className="border rounded px-1 py-1 text-sm h-8 w-full"
+                      value={urlState.groupBy}
+                      onChange={e => setUrlState(s => ({ ...s, groupBy: e.target.value as GroupBy }))}
+                    >
+                      <option value="team">Team</option>
+                      <option value="playerName">Player</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm text-gray-600">Aggregation</span>
+                    <select
+                      className="border rounded px-1 py-1 text-sm h-8 w-full"
+                      value={urlState.agg}
+                      onChange={e => setUrlState(s => ({ ...s, agg: e.target.value as Agg }))}
+                    >
+                      <option value="count">Count</option>
+                      {urlState.chartType === "pie" ? (
+                        <option value="sum">Sum of g</option>
+                      ) : (
+                        <option value="avg">Avg g</option>
+                      )}
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+            onClick={() => setShowChartOptions(v => !v)}
+            aria-expanded={showChartOptions}
+            aria-controls="chart-options"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <rect x="4" y="11" width="3" height="7" rx="0.5" />
+              <rect x="10.5" y="6" width="3" height="12" rx="0.5" />
+              <rect x="17" y="14" width="3" height="4" rx="0.5" />
+            </svg>
+            {showChartOptions ? "Hide chart options" : "Show chart options"}
+          </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+              onClick={() => setShowChart(v => !v)}
+              aria-expanded={showChart}
+              aria-controls="events-chart"
+            >
+              {showChart ? "Hide chart" : "Show chart"}
+            </button>
+          </div>
+          {/* options now inline to the left of the toggle button */}
+          </div>
+        </div>
+        {showChart && (
+          (() => {
+            const xVarKey: "occurredAtMs" | "accelerationGNum" = urlState.xVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
+            const yVarKey: "occurredAtMs" | "accelerationGNum" = urlState.yVar === "occurredAt" ? "occurredAtMs" : "accelerationGNum";
+            const binNum = Number(urlState.binCount) || 20;
+            return (
+              <EventsChart
+                rows={chartRows}
+                chartType={urlState.chartType}
+                xVar={xVarKey}
+                yVar={yVarKey}
+                groupBy={urlState.groupBy}
+                agg={urlState.agg}
+                binCount={binNum}
+              />
+            );
+          })()
+        )}
       </div>
     </div>
   );
