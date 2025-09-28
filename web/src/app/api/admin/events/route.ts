@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { playerName, team, occurredAt, accelerationG } = body ?? {};
+    const { playerName, team, occurredAt, accelerationG, angularVelocity } = body ?? {};
     if (!playerName || !occurredAt || typeof accelerationG !== "number") {
       return NextResponse.json({ error: "playerName, occurredAt and accelerationG are required" }, { status: 400 });
     }
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
         team: team ?? null,
         occurredAt: new Date(occurredAt),
         accelerationG,
+        angularVelocity: typeof angularVelocity === "number" ? angularVelocity : 0,
       },
     });
     return NextResponse.json({ event }, { status: 201 });

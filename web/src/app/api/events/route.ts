@@ -11,9 +11,11 @@ export async function GET(req: NextRequest) {
   // accelMin/Max are in g and stored as g
   const accelMinG = searchParams.get("accelMin") ? Number(searchParams.get("accelMin")) : undefined;
   const accelMaxG = searchParams.get("accelMax") ? Number(searchParams.get("accelMax")) : undefined;
+  const angularMin = searchParams.get("angularMin") ? Number(searchParams.get("angularMin")) : undefined;
+  const angularMax = searchParams.get("angularMax") ? Number(searchParams.get("angularMax")) : undefined;
   const timeFrom = searchParams.get("timeFrom") ? new Date(searchParams.get("timeFrom")!) : undefined;
   const timeTo = searchParams.get("timeTo") ? new Date(searchParams.get("timeTo")!) : undefined;
-  const sortBy = (searchParams.get("sortBy") ?? "occurredAt") as "occurredAt" | "accelerationG";
+  const sortBy = (searchParams.get("sortBy") ?? "occurredAt") as "occurredAt" | "accelerationG" | "angularVelocity";
   const order = (searchParams.get("order") ?? "desc") as "asc" | "desc";
 
   const where: Prisma.EventWhereInput = {
@@ -23,6 +25,12 @@ export async function GET(req: NextRequest) {
       accelerationG: {
         ...(accelMinG !== undefined ? { gte: accelMinG } : {}),
         ...(accelMaxG !== undefined ? { lte: accelMaxG } : {}),
+      },
+    } : {}),
+    ...((angularMin !== undefined || angularMax !== undefined) ? {
+      angularVelocity: {
+        ...(angularMin !== undefined ? { gte: angularMin } : {}),
+        ...(angularMax !== undefined ? { lte: angularMax } : {}),
       },
     } : {}),
     ...((timeFrom || timeTo) ? {

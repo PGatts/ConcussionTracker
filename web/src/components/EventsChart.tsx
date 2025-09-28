@@ -16,9 +16,9 @@ import {
 } from "recharts";
 
 type ChartType = "histogram" | "bar" | "pie";
-type NumericKey = "accelerationGNum" | "occurredAtMs";
-type CategoricalKey = "team" | "playerName";
-type Agg = "count" | "sum" | "avg";
+type NumericKey = "accelerationGNum" | "angularVelocityNum" | "occurredAtMs";
+type CategoricalKey = "team" | "playerName" | "timeYear";
+type Agg = "count" | "sum" | "avg" | "sumOmega";
 
 type Row = {
   id: string;
@@ -28,7 +28,17 @@ type Row = {
   accelerationG: number | string;
   accelerationGNum: number;
   occurredAtMs: number;
+  angularVelocityNum?: number;
 };
+
+function getGroupKey(r: Row, key: CategoricalKey): string {
+  if (key === "timeYear") {
+    const d = new Date(r.occurredAt);
+    return String(d.getFullYear());
+  }
+  if (key === "team") return String(r.team ?? "Unknown");
+  return String(r.playerName);
+}
 
 export function EventsChart(props: {
   rows: Row[];
@@ -58,17 +68,19 @@ export function EventsChart(props: {
   function buildPie(groupKey: CategoricalKey, aggregation: Agg) {
     const groups = new Map<string, number[]>();
     for (const r of rows) {
-      const key = String(r[groupKey] ?? "Unknown");
-      const v = Number.isFinite(r.accelerationGNum) ? r.accelerationGNum : 0;
+      const key = getGroupKey(r, groupKey);
+      const v = aggregation === "sumOmega"
+        ? (Number.isFinite(r.angularVelocityNum ?? NaN) ? (r.angularVelocityNum as number) : 0)
+        : (Number.isFinite(r.accelerationGNum) ? r.accelerationGNum : 0);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(v);
     }
     const data = Array.from(groups.entries()).map(([name, arr]) => {
       if (aggregation === "count") return { name, value: arr.length };
-      if (aggregation === "sum") return { name, value: arr.reduce((a, b) => a + b, 0) };
+      if (aggregation === "sum" || aggregation === "sumOmega") return { name, value: arr.reduce((a, b) => a + b, 0) };
       const sum = arr.reduce((a, b) => a + b, 0);
       return { name, value: arr.length ? sum / arr.length : 0 };
-    });
+    }).map(d => ({ name: d.name, value: typeof d.value === 'number' ? Number((d.value as number).toFixed(1)) : d.value }));
     data.sort((a, b) => b.value - a.value);
     return data;
   }
@@ -88,7 +100,7 @@ export function EventsChart(props: {
 
   if (chartType === "histogram" && xVar) {
     // For accelerationG, use fixed bins: 0-30, 31-60, 61+
-    if (xVar === "accelerationGNum") {
+    if (xVar === "accelerationGNum" || xVar === "angularVelocityNum") {
       const buckets = [
         { bucket: "0–30", count: 0 },
         { bucket: "31–60", count: 0 },
@@ -100,7 +112,7 @@ export function EventsChart(props: {
         "61+": "Dangerous",
       };
       for (const r of rows) {
-        const v = r.accelerationGNum;
+        const v = xVar === "accelerationGNum" ? r.accelerationGNum : (r.angularVelocityNum ?? NaN);
         if (!Number.isFinite(v)) continue;
         if (v <= 30) buckets[0].count += 1;
         else if (v <= 60) buckets[1].count += 1;
@@ -196,7 +208,7 @@ export function EventsChart(props: {
   if (chartType === "bar" && groupBy) {
     const groups = new Map<string, number[]>();
     for (const r of rows) {
-      const key = String(r[groupBy] ?? "Unknown");
+      const key = getGroupKey(r, groupBy);
       const v = Number.isFinite(r.accelerationGNum) ? r.accelerationGNum : 0;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(v);
