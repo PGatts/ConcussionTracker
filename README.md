@@ -5,6 +5,8 @@ Happy Head was inspired because half of the team has had concussions in the past
 ## What it does
 Happy Head monitors acceleration data inside of player's helmets/equipment and will display certain emojis, send data to database utilizing USART, and give text-to-speech based on the acceleration the player experiences in an effort for coaches, athletes, and medical staff to become more aware of potentially concussive collisions. Happy Head also stores this information along with timestamps in a database that can be looked through on a website after the game is over for future review of plays. 
 
+Check it out at here: https://happy-head.vercel.app
+
 ## How we built it
 We built this by integrating hardware sensors, embedded programming, data communication systems, a camera, computer vision, and a web application. Our design starts with a Texas Instruments Launchpad microcontroller in which we interfaced with a BMI160 IMU using I2C protocol to use its accelerometer and gyroscope. It also interfaces with a LCD TFT panel using SPI which draws a happy face sprite until a concussive hit is detected. At the same time the system uses USART communication to transmit the magnitude of the X, Y, and Z axis acceleration and the magnitude of the X, Y, and Z angular velocity to a computer which logs the data into a central database. If the value of either passes the threshold of a concussive hit then a text-to-speech alert is triggered ensuring that coaches and medical staff are alerted immediately and the LCD panel will draw a crying face animation. 
 
